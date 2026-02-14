@@ -1,0 +1,697 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://datatables-viewer.dev/schemas/config.schema.json",
+    "title": "DataTables Viewer Configuration",
+    "description": "Schema for DataTables Viewer application configuration",
+    "type": "object",
+    "required": [
+        "app"
+    ],
+    "properties": {
+        "app": {
+            "type": "object",
+            "description": "Application metadata and settings",
+            "required": [
+                "name",
+                "version"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Application name displayed in UI"
+                },
+                "version": {
+                    "type": "string",
+                    "pattern": "^\\d+\\.\\d+\\.\\d+$",
+                    "description": "Semantic version number"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Brief application description"
+                },
+                "environment": {
+                    "type": "string",
+                    "enum": [
+                        "development",
+                        "staging",
+                        "production",
+                        "local"
+                    ],
+                    "default": "production"
+                },
+                "apiUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Default API base URL"
+                }
+            }
+        },
+        "apis": {
+            "type": "object",
+            "description": "API endpoint configurations",
+            "additionalProperties": {
+                "$ref": "#/definitions/ApiConfig"
+            }
+        },
+        "dataTypes": {
+            "type": "object",
+            "description": "Data type configurations with matching rules",
+            "additionalProperties": {
+                "$ref": "#/definitions/DataTypeReference"
+            }
+        },
+        "defaults": {
+            "$ref": "#/definitions/GlobalSettings"
+        },
+        "features": {
+            "$ref": "#/definitions/FeatureFlags"
+        },
+        "plugins": {
+            "type": "array",
+            "description": "List of enabled plugin IDs",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "definitions": {
+        "ApiConfig": {
+            "type": "object",
+            "required": [
+                "id",
+                "name",
+                "url"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Unique identifier for this API"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Display name"
+                },
+                "url": {
+                    "type": "string",
+                    "description": "Base URL for API requests"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "rest",
+                        "graphql",
+                        "json_server",
+                        "mock"
+                    ],
+                    "default": "rest"
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "timeout": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "default": 30000
+                },
+                "retries": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 5,
+                    "default": 3
+                }
+            }
+        },
+        "DataTypeReference": {
+            "type": "object",
+            "properties": {
+                "configUrl": {
+                    "type": "string",
+                    "description": "URL to load configuration from"
+                },
+                "config": {
+                    "$ref": "#/definitions/DataTypeConfig",
+                    "description": "Inline configuration"
+                },
+                "matches": {
+                    "type": "array",
+                    "description": "Patterns to match API response types",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 1
+                },
+                "autoLoad": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
+        "DataTypeConfig": {
+            "type": "object",
+            "required": [
+                "id",
+                "name",
+                "version",
+                "tables"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Unique identifier"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Display name"
+                },
+                "version": {
+                    "type": "string",
+                    "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string",
+                    "description": "Bootstrap icon class"
+                },
+                "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "defaults": {
+                    "$ref": "#/definitions/TableSettings"
+                },
+                "sharedCategories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/CategorySchema"
+                    }
+                },
+                "tables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/TableSchema"
+                    }
+                }
+            }
+        },
+        "TableSchema": {
+            "type": "object",
+            "required": [
+                "columns"
+            ],
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "settings": {
+                    "$ref": "#/definitions/TableSettings"
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/CategorySchema"
+                    }
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ColumnSchema"
+                    }
+                },
+                "virtualColumns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/VirtualColumnSchema"
+                    }
+                }
+            }
+        },
+        "ColumnSchema": {
+            "type": "object",
+            "required": [
+                "column"
+            ],
+            "properties": {
+                "column": {
+                    "type": "string",
+                    "description": "Column key matching data field"
+                },
+                "displayName": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "dataType": {
+                    "type": "string",
+                    "enum": [
+                        "string",
+                        "number",
+                        "integer",
+                        "float",
+                        "boolean",
+                        "date",
+                        "datetime",
+                        "timestamp",
+                        "duration",
+                        "id",
+                        "url",
+                        "email",
+                        "phone",
+                        "percentage",
+                        "currency",
+                        "filesize",
+                        "sequence",
+                        "ontology",
+                        "json",
+                        "array"
+                    ],
+                    "default": "string"
+                },
+                "visible": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "sortable": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "filterable": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "searchable": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "copyable": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "width": {
+                    "type": "string",
+                    "default": "auto"
+                },
+                "align": {
+                    "type": "string",
+                    "enum": [
+                        "left",
+                        "center",
+                        "right"
+                    ],
+                    "default": "left"
+                },
+                "pin": {
+                    "type": "string",
+                    "enum": [
+                        "left",
+                        "right",
+                        "none"
+                    ],
+                    "default": "none"
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transform": {
+                    "$ref": "#/definitions/TransformConfig"
+                },
+                "conditionalStyles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ConditionalStyle"
+                    }
+                }
+            }
+        },
+        "CategorySchema": {
+            "type": "object",
+            "required": [
+                "id",
+                "name"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "defaultVisible": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "order": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "VirtualColumnSchema": {
+            "type": "object",
+            "required": [
+                "column",
+                "sourceColumns",
+                "compute"
+            ],
+            "properties": {
+                "column": {
+                    "type": "string"
+                },
+                "displayName": {
+                    "type": "string"
+                },
+                "sourceColumns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "compute": {
+                    "type": "object",
+                    "required": [
+                        "type"
+                    ],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "merge",
+                                "concat",
+                                "lookup",
+                                "formula",
+                                "conditional"
+                            ]
+                        },
+                        "template": {
+                            "type": "string"
+                        },
+                        "separator": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "visible": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "TransformConfig": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "required": [
+                        "type"
+                    ],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "link",
+                                "badge",
+                                "number",
+                                "date",
+                                "boolean",
+                                "percentage",
+                                "heatmap",
+                                "sequence",
+                                "ontology",
+                                "copy",
+                                "truncate",
+                                "highlight",
+                                "chain"
+                            ]
+                        },
+                        "options": {
+                            "type": "object"
+                        }
+                    }
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/TransformConfig"
+                    }
+                }
+            ]
+        },
+        "ConditionalStyle": {
+            "type": "object",
+            "required": [
+                "condition",
+                "style"
+            ],
+            "properties": {
+                "condition": {
+                    "type": "object",
+                    "required": [
+                        "operator",
+                        "value"
+                    ],
+                    "properties": {
+                        "operator": {
+                            "type": "string",
+                            "enum": [
+                                "eq",
+                                "ne",
+                                "gt",
+                                "gte",
+                                "lt",
+                                "lte",
+                                "contains",
+                                "startsWith",
+                                "endsWith",
+                                "matches",
+                                "empty",
+                                "notEmpty"
+                            ]
+                        },
+                        "value": {}
+                    }
+                },
+                "style": {
+                    "type": "object",
+                    "properties": {
+                        "color": {
+                            "type": "string"
+                        },
+                        "backgroundColor": {
+                            "type": "string"
+                        },
+                        "fontWeight": {
+                            "type": "string"
+                        },
+                        "fontStyle": {
+                            "type": "string"
+                        },
+                        "icon": {
+                            "type": "string"
+                        },
+                        "className": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "GlobalSettings": {
+            "type": "object",
+            "properties": {
+                "pageSize": {
+                    "type": "integer",
+                    "enum": [
+                        10,
+                        25,
+                        50,
+                        100,
+                        250,
+                        500
+                    ],
+                    "default": 50
+                },
+                "theme": {
+                    "type": "string",
+                    "enum": [
+                        "light",
+                        "dark",
+                        "system"
+                    ],
+                    "default": "system"
+                },
+                "density": {
+                    "type": "string",
+                    "enum": [
+                        "compact",
+                        "normal",
+                        "comfortable"
+                    ],
+                    "default": "normal"
+                },
+                "showRowNumbers": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "locale": {
+                    "type": "string",
+                    "default": "en-US"
+                },
+                "dateFormat": {
+                    "type": "string",
+                    "default": "YYYY-MM-DD"
+                },
+                "numberFormat": {
+                    "type": "object",
+                    "properties": {
+                        "decimals": {
+                            "type": "integer",
+                            "default": 2
+                        },
+                        "thousandsSeparator": {
+                            "type": "string",
+                            "default": ","
+                        },
+                        "decimalSeparator": {
+                            "type": "string",
+                            "default": "."
+                        }
+                    }
+                }
+            }
+        },
+        "TableSettings": {
+            "type": "object",
+            "properties": {
+                "pageSize": {
+                    "type": "integer"
+                },
+                "density": {
+                    "type": "string",
+                    "enum": [
+                        "compact",
+                        "normal",
+                        "comfortable"
+                    ]
+                },
+                "showRowNumbers": {
+                    "type": "boolean"
+                },
+                "enableSelection": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "enableExport": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "enableColumnReorder": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "enableColumnResize": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "defaultSortColumn": {
+                    "type": "string"
+                },
+                "defaultSortOrder": {
+                    "type": "string",
+                    "enum": [
+                        "asc",
+                        "desc"
+                    ]
+                }
+            }
+        },
+        "FeatureFlags": {
+            "type": "object",
+            "properties": {
+                "schemaExplorer": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "columnSearch": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "exportFormats": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "csv",
+                            "json",
+                            "tsv",
+                            "xlsx"
+                        ]
+                    }
+                },
+                "cellExpansion": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "rowSelection": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "keyboardNavigation": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "contextMenu": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "columnReordering": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "columnResizing": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "virtualScrolling": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "infiniteScroll": {
+                    "type": "boolean",
+                    "default": false
+                }
+            }
+        }
+    }
+}

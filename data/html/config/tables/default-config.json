@@ -1,0 +1,27 @@
+{
+    "id": "default",
+    "name": "Default Configuration",
+    "description": "Basic configuration for unmapped databases. Provides minimal rendering with default settings.",
+    "version": "1.0.0",
+    "icon": "bi-table",
+    "color": "#64748b",
+    "defaults": {
+        "pageSize": 50,
+        "density": "normal",
+        "showRowNumbers": true,
+        "enableSelection": true,
+        "enableExport": true
+    },
+    "sharedCategories": [
+        {
+            "id": "all",
+            "name": "All Columns",
+            "description": "All available columns",
+            "icon": "bi-list-columns",
+            "color": "#64748b",
+            "defaultVisible": true,
+            "order": 1
+        }
+    ],
+    "tables": {}
+}

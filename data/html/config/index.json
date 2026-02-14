@@ -1,0 +1,54 @@
+{
+    "app": {
+        "name": "DataTables Viewer",
+        "version": "3.1.0",
+        "description": "Production-grade configurable data table renderer for research applications"
+    },
+    "apis": {
+        "tablescanner": {
+            "id": "tablescanner",
+            "name": "TableScanner Service",
+            "url": "https://appdev.kbase.us/services/berdl_table_scanner",
+            "type": "rest"
+        },
+        "workspace": {
+            "id": "workspace",
+            "name": "KBase Workspace",
+            "url": "https://appdev.kbase.us/services/ws",
+            "type": "rest"
+        }
+    },
+    "defaultConfig": {
+        "configUrl": "./config/tables/default-config.json",
+        "description": "Fallback configuration for unmapped databases"
+    },
+    "defaults": {
+        "pageSize": 50,
+        "theme": "system",
+        "density": "normal",
+        "showRowNumbers": true,
+        "defaultSource": "76990/7/2",
+        "autoLoad": false,
+        "locale": "en-US",
+        "dateFormat": "YYYY-MM-DD",
+        "numberFormat": {
+            "decimals": 2,
+            "thousandsSeparator": ",",
+            "decimalSeparator": "."
+        }
+    },
+    "features": {
+        "schemaExplorer": true,
+        "columnSearch": true,
+        "exportFormats": [
+            "csv",
+            "json",
+            "tsv"
+        ],
+        "cellExpansion": true,
+        "rowSelection": true,
+        "keyboardNavigation": true,
+        "columnResizing": true
+    },
+    "plugins": []
+}
