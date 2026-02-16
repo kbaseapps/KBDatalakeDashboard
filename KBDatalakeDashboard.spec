@@ -1,9 +1,9 @@
 /*
-A KBase module: KBDatalakeDashboard
+A KBase module: KBDatalakeDashboard2
 This module provides a dashboard view for genome datalake tables,
 generating interactive HTML reports from GenomeDataLakeTables objects.
 */
-module KBDatalakeDashboard {
+module KBDatalakeDashboard2 {
 
     /* Standard KBase report output */
     typedef structure {
