@@ -1,0 +1,99 @@
+{
+  "title": "Genome Heatmap Viewer",
+  "data_files": {
+    "metadata": "metadata.json",
+    "summary": "summary_stats.json",
+    "genes": "genes_data.json",
+    "tree": "tree_data.json",
+    "cluster": "cluster_data.json",
+    "reactions": "reactions_data.json",
+    "metabolic_maps": {
+      "full": { "file": "metabolic_map_full.json", "name": "Global Metabolism" },
+      "core": { "file": "metabolic_map_core.json", "name": "Core Metabolism" }
+    }
+  },
+  "fields": {
+    "ID": 0, "FID": 1, "LENGTH": 2, "START": 3, "STRAND": 4,
+    "CONS_FRAC": 5, "PAN_CAT": 6, "FUNC": 7,
+    "N_KO": 8, "N_COG": 9, "N_PFAM": 10, "N_GO": 11,
+    "LOC": 12, "RAST_CONS": 13, "KO_CONS": 14, "GO_CONS": 15,
+    "EC_CONS": 16, "AVG_CONS": 17, "BAKTA_CONS": 18, "EC_AVG_CONS": 19,
+    "SPECIFICITY": 20, "IS_HYPO": 21, "HAS_NAME": 22, "N_EC": 23,
+    "AGREEMENT": 24, "CLUSTER_SIZE": 25, "N_MODULES": 26,
+    "EC_MAP_CONS": 27, "PROT_LEN": 28,
+    "REACTIONS": 29, "RICH_FLUX": 30, "RICH_CLASS": 31, "MIN_FLUX": 32,
+    "MIN_CLASS": 33, "PSORTB_NEW": 34, "ESSENTIALITY": 35,
+    "N_PHENOTYPES": 36, "N_FITNESS": 37
+  },
+  "categories": {
+    "localization": ["Cytoplasmic", "CytoMembrane", "Periplasmic", "OuterMembrane", "Extracellular", "Unknown"],
+    "pangenome": ["Unknown", "Accessory", "Core"],
+    "agreement": ["Both Hypothetical", "One Hypothetical", "Disagree", "Agree"]
+  },
+  "tracks": [
+    { "id": "order", "name": "Gene Order", "field": "ID", "type": "sequential", "enabled": true },
+    { "id": "strand", "name": "Gene Direction", "field": "STRAND", "type": "binary", "enabled": true },
+    { "id": "conservation", "name": "Pangenome Conservation", "field": "CONS_FRAC", "type": "sequential", "enabled": true },
+    { "id": "pan_category", "name": "Core/Accessory", "field": "PAN_CAT", "type": "categorical", "enabled": true, "categories": "pangenome" },
+    { "id": "avg_cons", "name": "Function Consensus (avg)", "field": "AVG_CONS", "type": "consistency", "enabled": true },
+    { "id": "rast_cons", "name": "RAST Consistency", "field": "RAST_CONS", "type": "consistency", "enabled": false },
+    { "id": "ko_cons", "name": "KO Consistency", "field": "KO_CONS", "type": "consistency", "enabled": false },
+    { "id": "go_cons", "name": "GO Consistency", "field": "GO_CONS", "type": "consistency", "enabled": false },
+    { "id": "ec_cons", "name": "EC Consistency", "field": "EC_CONS", "type": "consistency", "enabled": false },
+    { "id": "bakta_cons", "name": "Bakta Consistency", "field": "BAKTA_CONS", "type": "consistency", "enabled": false },
+    { "id": "specificity", "name": "Annotation Specificity", "field": "SPECIFICITY", "type": "consistency", "enabled": false },
+    { "id": "n_ko", "name": "# KEGG Terms", "field": "N_KO", "type": "sequential", "enabled": false },
+    { "id": "n_cog", "name": "# COG Terms", "field": "N_COG", "type": "sequential", "enabled": false },
+    { "id": "n_pfam", "name": "# Pfam Terms", "field": "N_PFAM", "type": "sequential", "enabled": false },
+    { "id": "n_go", "name": "# GO Terms", "field": "N_GO", "type": "sequential", "enabled": false },
+    { "id": "localization", "name": "Subcellular Localization", "field": "LOC", "type": "categorical", "enabled": false, "categories": "localization" },
+    { "id": "is_hypo", "name": "Hypothetical Protein", "field": "IS_HYPO", "type": "binary", "enabled": false },
+    { "id": "has_name", "name": "Has Gene Name", "field": "HAS_NAME", "type": "binary", "enabled": false },
+    { "id": "n_ec", "name": "# EC Numbers", "field": "N_EC", "type": "sequential", "enabled": false },
+    { "id": "agreement", "name": "RAST/Bakta Agreement", "field": "AGREEMENT", "type": "categorical", "enabled": false, "categories": "agreement" },
+    { "id": "cluster_size", "name": "Cluster Size", "field": "CLUSTER_SIZE", "type": "sequential", "enabled": false },
+    { "id": "n_modules", "name": "KEGG Module Hits", "field": "N_MODULES", "type": "sequential", "enabled": false },
+    { "id": "ec_map_cons", "name": "EC Mapped Consistency", "field": "EC_MAP_CONS", "type": "consistency", "enabled": false },
+    { "id": "prot_len", "name": "Protein Length", "field": "PROT_LEN", "type": "sequential", "enabled": false },
+    { "id": "rich_flux", "name": "Flux (rich media)", "field": "RICH_FLUX", "type": "sequential", "enabled": false },
+    { "id": "min_flux", "name": "Flux (minimal media)", "field": "MIN_FLUX", "type": "sequential", "enabled": false },
+    { "id": "rich_class", "name": "Flux Class (rich)", "field": "RICH_CLASS", "type": "categorical", "enabled": false, "categories": ["essential", "variable", "blocked"] },
+    { "id": "min_class", "name": "Flux Class (minimal)", "field": "MIN_CLASS", "type": "categorical", "enabled": false, "categories": ["essential", "variable", "blocked"] },
+    { "id": "essentiality", "name": "Gene Essentiality", "field": "ESSENTIALITY", "type": "sequential", "enabled": false },
+    { "id": "n_phenotypes", "name": "# Phenotypes", "field": "N_PHENOTYPES", "type": "sequential", "enabled": false },
+    { "id": "n_fitness", "name": "# Fitness Scores", "field": "N_FITNESS", "type": "sequential", "enabled": false }
+  ],
+  "placeholder_tracks": [
+    { "id": "neighborhood", "name": "Neighborhood Conservation*", "pending": true }
+  ],
+  "sort_presets": [
+    { "id": "genome", "name": "Genome Order" },
+    { "id": "conservation", "name": "Conservation", "field": "CONS_FRAC", "direction": "desc" },
+    { "id": "consistency", "name": "Consistency", "field": "AVG_CONS", "direction": "desc", "na_last": true },
+    { "id": "annotation_quality", "name": "Annotation Depth", "composite": ["N_KO", "N_COG", "N_PFAM", "N_GO", "FUNC"], "direction": "desc" },
+    { "id": "pan_status", "name": "Pangenome Status", "field": "PAN_CAT", "direction": "desc", "tiebreak": "CONS_FRAC" },
+    { "id": "low_consistency", "name": "Lowest Consistency", "field": "AVG_CONS", "direction": "asc", "na_last": true },
+    { "id": "strand_blocks", "name": "Strand Blocks", "field": "STRAND", "direction": "desc", "tiebreak": "START" }
+  ],
+  "analysis_views": [
+    { "id": "characterization", "name": "Characterization Targets", "tracks": ["is_hypo", "pan_category", "conservation", "avg_cons"], "sort": "pan_status", "summary": "Find conserved genes with unknown function" },
+    { "id": "annotation_quality", "name": "Annotation Quality", "tracks": ["agreement", "avg_cons", "specificity", "is_hypo"], "sort": "low_consistency", "summary": "Spot annotation conflicts and gaps" },
+    { "id": "metabolic", "name": "Metabolic Landscape", "tracks": ["n_ec", "n_modules", "ec_cons", "ec_map_cons"], "sort": null, "summary": "Map enzymatic and pathway coverage" },
+    { "id": "pangenome", "name": "Pangenome Structure", "tracks": ["conservation", "pan_category", "cluster_size", "strand"], "sort": "conservation", "summary": "Explore pangenome architecture and gene families" },
+    { "id": "annotation_depth", "name": "Knowledge Coverage", "tracks": ["has_name", "n_ko", "n_go", "n_pfam", "n_ec"], "sort": "annotation_quality", "summary": "How well-characterized is each gene?" },
+    { "id": "consistency_compare", "name": "Consistency Comparison", "tracks": ["rast_cons", "ko_cons", "bakta_cons", "ec_cons", "go_cons"], "sort": "low_consistency", "summary": "Compare consistency across annotation sources" }
+  ],
+  "default_tracks": ["order", "strand", "conservation", "pan_category", "avg_cons"],
+  "cluster_color_options": [
+    { "value": "pan_category", "label": "Core/Accessory" },
+    { "value": "conservation", "label": "Conservation" },
+    { "value": "avg_cons", "label": "Avg Consistency" },
+    { "value": "is_hypo", "label": "Hypothetical" },
+    { "value": "localization", "label": "Localization" },
+    { "value": "n_ko", "label": "# KEGG Terms" },
+    { "value": "n_modules", "label": "Module Hits" },
+    { "value": "cluster_size", "label": "Cluster Size" },
+    { "value": "specificity", "label": "Specificity" },
+    { "value": "agreement", "label": "RAST/Bakta Agreement" }
+  ]
+}

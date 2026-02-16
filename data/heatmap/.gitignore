@@ -1,0 +1,48 @@
+# Test artifacts
+.playwright-mcp/
+playwright-report/
+test-results/
+tests/
+*.spec.js
+playwright.config.js
+
+# Screenshots and images
+*.png
+*.jpg
+*.jpeg
+
+# Node/npm
+node_modules/
+package-lock.json
+package.json
+
+# Notebooks
+notebooks/
+
+# Old versions
+heatmap_standalone.html
+
+# Data files (generated/provided per instance)
+genes_data.json
+tree_data.json
+reactions_data.json
+summary_stats.json
+metadata.json
+
+# Database files
+*.db
+*.sqlite
+
+# Python
+*.py
+__pycache__/
+*.pyc
+
+# Markdown docs
+*.md
+!README.md
+
+# Git/development
+.git/
+.gitignore
+.claude/

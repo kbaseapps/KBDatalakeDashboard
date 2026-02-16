@@ -80,12 +80,21 @@ class KBDatalakeDashboard:
         output_directory = os.path.join(self.shared_folder, str(uuid.uuid4()))
         shutil.copytree('/kb/module/data/html', output_directory)
 
-        # Write app-config.json so the DataTables Viewer knows which object to display
+        # Copy heatmap viewer to a subdirectory
+        heatmap_dir = os.path.join(output_directory, 'heatmap')
+        shutil.copytree('/kb/module/data/heatmap', heatmap_dir)
+
+        # Write app-config.json to both directories so both viewers know which object to display
         app_config = {
             "upa": input_ref
         }
+        # Write to root for dashboard
         app_config_path = os.path.join(output_directory, 'app-config.json')
         with open(app_config_path, 'w') as f:
+            json.dump(app_config, f, indent=4)
+        # Write to heatmap directory for heatmap viewer
+        heatmap_config_path = os.path.join(heatmap_dir, 'app-config.json')
+        with open(heatmap_config_path, 'w') as f:
             json.dump(app_config, f, indent=4)
         self.logger.info(f"Wrote app-config.json with UPA: {app_config['upa']}")
 
@@ -98,12 +107,20 @@ class KBDatalakeDashboard:
         self.logger.info(f"HTML directory contents: {os.listdir(output_directory)}")
         self.logger.info(f"Shock ID: {shock_id}")
 
-        html_links = [{
-            'shock_id': shock_id,
-            'name': 'index.html',
-            'label': 'Genome Datalake Dashboard',
-            'description': 'Interactive dashboard for genome datalake tables'
-        }]
+        html_links = [
+            {
+                'shock_id': shock_id,
+                'name': 'index.html',
+                'label': 'Genome Datalake Dashboard',
+                'description': 'Interactive dashboard for genome datalake tables'
+            },
+            {
+                'shock_id': shock_id,
+                'name': 'heatmap/index.html',
+                'label': 'Genome Heatmap Viewer',
+                'description': 'Interactive heatmap visualization of genome features with tracks, phylogenetic tree, pangenome clusters, and metabolic pathways'
+            }
+        ]
 
         # Create KBase report
         report_client = KBaseReport(self.callback_url)
