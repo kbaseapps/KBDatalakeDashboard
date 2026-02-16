@@ -58,11 +58,11 @@
     { "id": "rich_class", "name": "Flux Class (rich)", "field": "RICH_CLASS", "type": "categorical", "enabled": false, "categories": ["essential", "variable", "blocked"] },
     { "id": "min_class", "name": "Flux Class (minimal)", "field": "MIN_CLASS", "type": "categorical", "enabled": false, "categories": ["essential", "variable", "blocked"] },
     { "id": "essentiality", "name": "Gene Essentiality", "field": "ESSENTIALITY", "type": "sequential", "enabled": false },
-    { "id": "n_phenotypes", "name": "# Phenotypes", "field": "N_PHENOTYPES", "type": "sequential", "enabled": false },
-    { "id": "n_fitness", "name": "# Fitness Scores", "field": "N_FITNESS", "type": "sequential", "enabled": false }
+    { "id": "n_phenotypes", "name": "# Phenotypes", "field": "N_PHENOTYPES", "type": "sequential", "enabled": false }
   ],
   "placeholder_tracks": [
-    { "id": "neighborhood", "name": "Neighborhood Conservation*", "pending": true }
+    { "id": "neighborhood", "name": "Neighborhood Conservation*", "pending": true },
+    { "id": "n_fitness", "name": "# Fitness Scores*", "pending": true }
   ],
   "sort_presets": [
     { "id": "genome", "name": "Genome Order" },
