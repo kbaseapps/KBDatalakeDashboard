@@ -1,0 +1,159 @@
+{
+  "missing_functions": {
+    "pangenome_missing": 51,
+    "gapfilled": 192,
+    "top_missing": [
+      {
+        "reaction": "rxn09042",
+        "function": "0.5 O2 [c0] + 2-Octaprenyl-6-methoxyphenol [c0] --> 2-Octaprenyl-6-methoxy-1,4-benzoquinol [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn09040",
+        "function": "0.5 O2 [c0] + 2-Octaprenyl3-methyl-6-methoxy- 1,4-benzoquinol [c0] --> 2-Octaprenyl-3-methyl-5-hydroxy-6-methoxy-1,4-benzoquinol [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn09427",
+        "function": "2 NADPH [c0] + 3 H+ [c0] + Malonyl-CoA [c0] + Palmitoyl-CoA [c0] --> H2O [c0] + 2 NADP [c0] + CoA [c0] + CO2 [c0] + strcoa [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn43837",
+        "function": "2 Reducedferredoxin [c0] + C15812 [c0] + Adenylated-ThiS-Proteins [c0] --> AMP [c0] + 2 Oxidizedferredoxin [c0] + Sulfur-Carrier-Proteins-ThiI [c0] + Thiocarboxyadenylated-ThiS-Proteins [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn02885",
+        "function": "2-Oxohept-3-enedioate [c0] <-- 2-Hydroxyhepta-2,4-dienedioate [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn09180",
+        "function": "3 Fumarate [c0] + ProtoporphyrinogenIX [c0] --> 3 Succinate [c0] + Protoporphyrin [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn00255",
+        "function": "4-Carboxy-4-hydroxy-2-oxoadipate [c0] <=> Pyruvate [c0] + Oxaloacetate [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn03040",
+        "function": "5-Carboxymethyl-2-hydroxymuconate [c0] <=> 5-Carboxy-2-oxohept-3-enedioate [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn00216",
+        "function": "ATP [c0] + D-Glucose [c0] --> ADP [c0] + H+ [c0] + D-glucose-6-phosphate [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn01518",
+        "function": "ATP [c0] + Deoxyuridine [c0] --> ADP [c0] + H+ [c0] + dUMP [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn00138",
+        "function": "ATP [c0] + NH3 [c0] + Deamido-NAD [c0] --> NAD [c0] + PPi [c0] + AMP [c0] + 2 H+ [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn25839",
+        "function": "ATP [c0] + Thi-S [c0] --> PPi [c0] + Adenylated-ThiS-Proteins [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn01143",
+        "function": "ATP [c0] + Thymidine [c0] --> ADP [c0] + H+ [c0] + dTMP [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn11077",
+        "function": "Ca2+ [e0] + Citrate [e0] --> Ca2+ [c0] + Citrate [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn05459",
+        "function": "CoA [c0] + H+ [c0] + Octodecanoyl-ACP [c0] --> strcoa [c0] + ACP [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn08275",
+        "function": "Cu2+ [c0] + H+ [e0] --> Cu2+ [e0] + H+ [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn05212",
+        "function": "Cu2+ [e0] --> Cu2+ [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn10623",
+        "function": "Fe2+ [c0] + sirohydrochlorin 2 [c0] --> 2 H+ [c0] + Siroheme [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn04413",
+        "function": "GTP [c0] + Adenosyl cobinamide [c0] --> GDP [c0] + H+ [c0] + Adenosyl cobinamide phosphate [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      },
+      {
+        "reaction": "rxn00393",
+        "function": "Glucose-1-phosphate [c0] + Riboflavin [c0] --> D-Glucose [c0] + FMN [c0]",
+        "pangenome": true,
+        "rich_gapfill": false,
+        "min_gapfill": false
+      }
+    ]
+  },
+  "growth_phenotypes": {
+    "positive_growth": 19,
+    "negative_growth": 193,
+    "avg_positive_gaps": 0,
+    "avg_negative_gaps": 3.4508,
+    "total_phenotypes": 212
+  },
+  "comparison": {
+    "n_reference_genomes": 13,
+    "closest_ani": 99.97
+  }
+}
