@@ -15,7 +15,3 @@ owners:
 
 data-version:
     0.0.1
-
-# Use direct execution mode for async jobs (not server mode)
-job-config:
-    method-runner: jobRunner
