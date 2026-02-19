@@ -1641,7 +1641,7 @@
         },
         binary: (v) => v ? '#6366f1' : '#f97316',
         categorical: (v) => {
-            const colors = ['#9ca3af', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ef4444'];
+            const colors = ['#9ca3af', '#f59e0b', '#22c55e', '#3b82f6', '#ec4899', '#ef4444'];
             return colors[v % colors.length];
         },
         consistency: (v) => {
@@ -1705,7 +1705,7 @@
 
     // Flux class constants
     const FLUX_CLASSES = ['blocked', 'forward_only', 'reverse_only', 'reversible', 'essential_forward', 'essential_reverse'];
-    const FLUX_CLASS_COLORS = { blocked: '#d1d5db', forward_only: '#3b82f6', reverse_only: '#8b5cf6', reversible: '#22c55e', essential_forward: '#ef4444', essential_reverse: '#f97316' };
+    const FLUX_CLASS_COLORS = { blocked: '#d1d5db', forward_only: '#3b82f6', reverse_only: '#ec4899', reversible: '#22c55e', essential_forward: '#ef4444', essential_reverse: '#f97316' };
     const FLUX_CLASS_LABELS = { blocked: 'Blocked', forward_only: 'Forward Only', reverse_only: 'Reverse Only', reversible: 'Reversible', essential_forward: 'Essential (fwd)', essential_reverse: 'Essential (rev)' };
 
     // Tree stat bar config
@@ -1722,7 +1722,7 @@
             id: 'n_clusters',
             name: 'Cluster Count',
             short: 'Clusters',
-            color: '#8b5cf6',
+            color: '#ec4899',
             enabled: true,
             desc: 'Number of distinct pangenome clusters this genome contributes to. Each cluster represents a gene family (orthologs/paralogs across genomes). Ideally close to gene count; lower values suggest many duplicated genes.'
         },
@@ -1754,7 +1754,7 @@
             id: 'ko_pct',
             name: 'KEGG Coverage',
             short: 'KEGG %',
-            color: '#8b5cf6',
+            color: '#ec4899',
             enabled: false,
             desc: 'Percentage of genes with KEGG Orthology (KO) assignments. KO links genes to metabolic pathways and functional modules. Higher coverage indicates better metabolic annotation. User genome only.'
         },
@@ -1993,15 +1993,14 @@
             '<span class="tt-label">Tracks shown:</span>Avg Consistency + Specificity' +
             '<span class="tt-label">Example use case:</span>Genes with low consistency may have unreliable annotations. Prioritize these for manual curation or re-annotation.' },
         { id: 'metabolic', name: 'Metabolic Landscape',
-          tracks: ['n_ec', 'n_modules', 'ec_cons', 'ec_map_cons'],
+          tracks: ['n_ec', 'ec_cons', 'rich_class', 'essentiality'],
           sort: null,
-          summary: 'Map enzymatic and pathway coverage',
+          summary: 'Map enzymatic and metabolic gene activity',
           desc: '<strong>Metabolic Landscape</strong>' +
-            '<span class="tt-label">Purpose:</span>Visualize which genes have enzymatic activity, participate in metabolic modules, and how consistent their enzyme classifications are.' +
-            '<span class="tt-label">What to look for:</span>Dark bands in # EC and Module Hits indicate metabolic gene clusters. Compare EC Consistency vs EC Mapped Consistency to find genes where the EC assignment depends on the mapping method.' +
-            '<span class="tt-label">Tracks shown:</span># EC Numbers + KEGG Module Hits + EC Consistency + EC Mapped Consistency' +
-            '<span class="tt-label">EC Mapped vs EC Consistency:</span>EC Mapped uses reaction-gene mapping from metabolic model. Regular EC uses direct annotation. Differences reveal model-specific enzyme assignments.' +
-            '<span class="tt-label">Example use case:</span>Genes with many EC numbers but low EC consistency may represent multi-functional enzymes or promiscuous annotations. Cross-reference with Metabolic Map tab to visualize on pathways.' },
+            '<span class="tt-label">Purpose:</span>Visualize which genes have enzymatic activity and how they contribute to the metabolic model. Combines annotation counts, consistency, flux classification, and gene essentiality.' +
+            '<span class="tt-label">What to look for:</span>Dark bands in # EC indicate genes with enzymatic annotations. Orange in EC Consistency means annotations agree across orthologs. Flux Class shows whether reactions are essential, variable, or blocked. Essentiality shows how critical each gene is to the metabolic model.' +
+            '<span class="tt-label">Tracks shown:</span># EC Numbers + EC Consistency + Flux Class (rich) + Gene Essentiality' +
+            '<span class="tt-label">Example use case:</span>Genes with many EC numbers, high consistency, and essential flux class are well-characterized metabolic enzymes. Genes with EC numbers but blocked flux may indicate inactive pathways. Cross-reference with the Metabolic Map tab.' },
         { id: 'pangenome', name: 'Pangenome Structure',
           tracks: ['conservation', 'pan_category', 'cluster_size', 'strand'],
           sort: 'conservation',
@@ -2831,7 +2830,8 @@
                         color = `rgb(${r}, ${g}, ${b})`;
                     }
                 } else if (track.type === 'diverging') {
-                    // Diverging scale: red (negative) - white (0) - green (positive), gray for N/A (-1)
+                    // Diverging scale: purple (negative) - white (0) - teal (positive), gray for N/A (-1)
+                    // Colorblind-safe: avoids red-green confusion
                     if (value === -1 || value === null || value === undefined) {
                         color = '#e5e7eb';
                     } else {
@@ -2839,11 +2839,13 @@
                         const maxAbs = Math.max(Math.abs(stats.min < 0 ? stats.min : 0), Math.abs(stats.max));
                         const normalized = value / (maxAbs || 1);
                         if (normalized < 0) {
+                            // White (#ffffff) to purple (#7c3aed)
                             const t = Math.min(1, Math.abs(normalized));
-                            color = `rgb(255, ${Math.floor(255 - 200 * t)}, ${Math.floor(255 - 200 * t)})`;
+                            color = `rgb(${Math.floor(255 - (255 - 124) * t)}, ${Math.floor(255 - (255 - 58) * t)}, ${Math.floor(255 - (255 - 237) * t)})`;
                         } else {
+                            // White (#ffffff) to teal (#0d9488)
                             const t = Math.min(1, normalized);
-                            color = `rgb(${Math.floor(255 - 200 * t)}, 255, ${Math.floor(255 - 200 * t)})`;
+                            color = `rgb(${Math.floor(255 - (255 - 13) * t)}, ${Math.floor(255 - (255 - 148) * t)}, ${Math.floor(255 - (255 - 136) * t)})`;
                         }
                     }
                 } else if (track.type === 'flux_class') {
@@ -2892,19 +2894,19 @@
         },
         diverging: {
             html: '<span class="legend-label">Fitness:</span><span>Negative</span>' +
-                '<div class="legend-color" style="background: linear-gradient(to right, #ff3737, #ffffff, #37ff37); width: 60px;"></div>' +
+                '<div class="legend-color" style="background: linear-gradient(to right, #7c3aed, #ffffff, #0d9488); width: 60px;"></div>' +
                 '<span>Positive</span>' +
                 '<div class="legend-color" style="background: #e5e7eb;"></div><span>N/A</span>',
-            tip: 'Average fitness score across phenotype conditions. Red = gene disruption causes growth defect (negative fitness). Green = growth advantage. White = neutral. Gray = no fitness data available.'
+            tip: 'Average fitness score across phenotype conditions. Purple = gene disruption causes growth defect (negative fitness). Teal = growth advantage. White = neutral. Gray = no fitness data available. Colorblind-safe palette.'
         },
         flux_class: {
             html: '<span class="legend-label">Flux Class:</span>' +
                 '<div class="legend-color" style="background: #ef4444;"></div><span>Essential</span>' +
                 '<div class="legend-color" style="background: #3b82f6;"></div><span>Forward</span>' +
-                '<div class="legend-color" style="background: #8b5cf6;"></div><span>Reverse</span>' +
+                '<div class="legend-color" style="background: #ec4899;"></div><span>Reverse</span>' +
                 '<div class="legend-color" style="background: #22c55e;"></div><span>Reversible</span>' +
                 '<div class="legend-color" style="background: #d1d5db;"></div><span>Blocked</span>',
-            tip: 'Reaction classification from Flux Variability Analysis. Red = essential (required for growth). Blue = forward-only. Purple = reverse-only. Green = reversible. Gray = blocked/inactive.'
+            tip: 'Reaction classification from Flux Variability Analysis. Red = essential (required for growth). Blue = forward-only. Pink = reverse-only. Green = reversible. Gray = blocked/inactive.'
         },
         binary: {
             html: '',
@@ -2941,7 +2943,7 @@
                         '<div class="legend-color" style="background: #f59e0b;"></div><span>Memb</span>' +
                         '<div class="legend-color" style="background: #22c55e;"></div><span>Peri</span>' +
                         '<div class="legend-color" style="background: #3b82f6;"></div><span>Outer</span>' +
-                        '<div class="legend-color" style="background: #8b5cf6;"></div><span>Extra</span>',
+                        '<div class="legend-color" style="background: #ec4899;"></div><span>Extra</span>',
                     tip: 'PSORTb predicted location: Cytoplasmic, Cytoplasmic Membrane, Periplasmic, Outer Membrane, Extracellular, or Unknown.'
                 }
             }
@@ -3249,7 +3251,7 @@
 
             // Leaf dot - color by genome kind
             const kind = meta.kind || '';
-            const dotColor = isUser ? '#dc2626' : kind === 'clade' ? '#8b5cf6' : '#64748b';
+            const dotColor = isUser ? '#dc2626' : kind === 'clade' ? '#ec4899' : '#64748b';
             svg += `<circle cx="${labelWidth}" cy="${y}" r="${isUser ? 4 : 3}" fill="${dotColor}"/>`;
 
             // Highlight band for user genome
@@ -3551,7 +3553,7 @@
                 html = '<div class="legend-item"><span>Low</span><div class="legend-color" style="background: linear-gradient(to right, rgb(235,240,250), rgb(45,100,180)); width: 50px;"></div><span>High</span></div>';
                 break;
             case 'avg_cons': case 'specificity':
-                html = '<div class="legend-item"><span>0</span><div class="legend-color" style="background: linear-gradient(to right, #ef4444, #fbbf24, #22c55e); width: 50px;"></div><span>1</span><div class="legend-color" style="background: #e5e7eb;"></div>N/A</div>';
+                html = '<div class="legend-item"><span>0</span><div class="legend-color" style="background: linear-gradient(to right, #2563eb, #ffffff, #f97316); width: 50px;"></div><span>1</span><div class="legend-color" style="background: #e5e7eb;"></div>N/A</div>';
                 break;
             case 'localization':
                 html = LOC_NAMES.map((name, i) => `<div class="legend-item"><div class="legend-color" style="background:${COLORS.categorical(i)}"></div>${name}</div>`).join('');
@@ -4523,7 +4525,7 @@
                         <span style="font-weight:600;">${withKO} (${koPct}%)</span>
                     </div>
                     <div style="background:var(--kb-base-lightest); height:12px; border-radius:2px; overflow:hidden;">
-                        <div style="background:#8b5cf6; height:100%; width:${koPct}%; opacity:0.8;"></div>
+                        <div style="background:#ec4899; height:100%; width:${koPct}%; opacity:0.8;"></div>
                     </div>
                 </div>
                 <div>
@@ -4910,7 +4912,7 @@
 
         const html = `
             <div style="color:var(--kb-base); line-height:1.6;">
-                <p style="margin-bottom:10px; font-size:10px;">Metabolic modeling (FBA) tested ${growthData.total_phenotypes || 0} carbon sources</p>
+                <p style="margin-bottom:10px; font-size:10px;">Flux Balance Analysis (FBA) tested ${growthData.total_phenotypes || 0} growth conditions</p>
                 <div style="display:grid; grid-template-columns:1fr; gap:8px;">
                     <div style="padding:8px; background:var(--kb-base-lightest); border-radius:4px; border-left:3px solid #22c55e;">
                         <div style="font-size:10px; color:var(--kb-base); margin-bottom:2px;">Positive Growth</div>
@@ -4921,13 +4923,13 @@
                         <div style="font-size:20px; font-weight:700; color:#ef4444;">${growthData.negative_growth || 0}</div>
                     </div>
                     <div style="padding:8px; background:var(--kb-base-lightest); border-radius:4px; border-left:3px solid #3b82f6;">
-                        <div style="font-size:10px; color:var(--kb-base); margin-bottom:2px;">Avg Missing Reactions</div>
+                        <div style="font-size:10px; color:var(--kb-base); margin-bottom:2px;">Avg Gapfilled Reactions (neg.)</div>
                         <div style="font-size:20px; font-weight:700; color:#3b82f6;">${(growthData.avg_negative_gaps || 0).toFixed(1)}</div>
                     </div>
                     ${growthData.zero_gap_count != null ? `
-                    <div style="padding:8px; background:var(--kb-base-lightest); border-radius:4px; border-left:3px solid #8b5cf6;">
+                    <div style="padding:8px; background:var(--kb-base-lightest); border-radius:4px; border-left:3px solid #ec4899;">
                         <div style="font-size:10px; color:var(--kb-base); margin-bottom:2px;">Complete Models (zero gaps)</div>
-                        <div style="font-size:20px; font-weight:700; color:#8b5cf6;">${growthData.zero_gap_count}</div>
+                        <div style="font-size:20px; font-weight:700; color:#ec4899;">${growthData.zero_gap_count}</div>
                     </div>` : ''}
                 </div>
             </div>

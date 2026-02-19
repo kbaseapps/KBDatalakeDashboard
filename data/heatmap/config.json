@@ -1,16 +1,16 @@
 {
   "title": "Datalake Dashboard",
   "data_files": {
-    "metadata": "metadata.json",
-    "summary": "summary_stats.json",
-    "genes": "genes_data.json",
-    "tree": "tree_data.json",
-    "cluster": "cluster_data.json",
-    "reactions": "reactions_data.json",
-    "ref_genomes": "ref_genomes_data.json",
+    "metadata": "data/metadata.json",
+    "summary": "data/summary_stats.json",
+    "genes": "data/genes_data.json",
+    "tree": "data/tree_data.json",
+    "cluster": "data/cluster_data.json",
+    "reactions": "data/reactions_data.json",
+    "ref_genomes": "data/ref_genomes_data.json",
     "metabolic_maps": {
-      "full": { "file": "metabolic_map_full.json", "name": "Global Metabolism" },
-      "core": { "file": "metabolic_map_core.json", "name": "Core Metabolism" }
+      "full": { "file": "data/metabolic_map_full.json", "name": "Global Metabolism" },
+      "core": { "file": "data/metabolic_map_core.json", "name": "Core Metabolism" }
     }
   },
   "fields": {
@@ -50,8 +50,6 @@
     { "id": "has_name", "name": "Has Gene Name", "field": "HAS_NAME", "type": "binary", "enabled": false },
     { "id": "n_ec", "name": "# EC Numbers", "field": "N_EC", "type": "sequential", "enabled": false },
     { "id": "cluster_size", "name": "Cluster Size", "field": "CLUSTER_SIZE", "type": "sequential", "enabled": false },
-    { "id": "n_modules", "name": "KEGG Module Hits", "field": "N_MODULES", "type": "sequential", "enabled": false },
-    { "id": "ec_map_cons", "name": "EC Mapped Consistency", "field": "EC_MAP_CONS", "type": "consistency", "enabled": false },
     { "id": "prot_len", "name": "Protein Length", "field": "PROT_LEN", "type": "sequential", "enabled": false },
     { "id": "rich_flux", "name": "Flux (rich media)", "field": "RICH_FLUX", "type": "sequential", "enabled": false },
     { "id": "min_flux", "name": "Flux (minimal media)", "field": "MIN_FLUX", "type": "sequential", "enabled": false },
@@ -63,7 +61,9 @@
     { "id": "fitness_avg", "name": "Avg Fitness Score", "field": "FITNESS_AVG", "type": "diverging", "enabled": false }
   ],
   "placeholder_tracks": [
-    { "id": "neighborhood", "name": "Neighborhood Conservation*", "pending": true }
+    { "id": "neighborhood", "name": "Neighborhood Conservation*", "pending": true },
+    { "id": "n_modules", "name": "KEGG Module Hits*", "pending": true },
+    { "id": "ec_map_cons", "name": "EC Mapped Consistency*", "pending": true }
   ],
   "sort_presets": [
     { "id": "genome", "name": "Genome Order" },
@@ -77,7 +77,7 @@
   "analysis_views": [
     { "id": "characterization", "name": "Characterization Targets", "tracks": ["pan_category", "conservation", "avg_cons", "specificity"], "sort": "pan_status", "summary": "Find conserved genes with unknown function" },
     { "id": "annotation_quality", "name": "Annotation Quality", "tracks": ["avg_cons", "specificity"], "sort": "low_consistency", "summary": "Spot annotation conflicts and gaps" },
-    { "id": "metabolic", "name": "Metabolic Landscape", "tracks": ["n_ec", "n_modules", "ec_cons", "ec_map_cons"], "sort": null, "summary": "Map enzymatic and pathway coverage" },
+    { "id": "metabolic", "name": "Metabolic Landscape", "tracks": ["n_ec", "ec_cons", "rich_class", "essentiality"], "sort": null, "summary": "Map enzymatic and metabolic gene activity" },
     { "id": "pangenome", "name": "Pangenome Structure", "tracks": ["conservation", "pan_category", "cluster_size", "strand"], "sort": "conservation", "summary": "Explore pangenome architecture and gene families" },
     { "id": "annotation_depth", "name": "Knowledge Coverage", "tracks": ["has_name", "n_ko", "n_go", "n_pfam", "n_ec"], "sort": "annotation_quality", "summary": "How well-characterized is each gene?" },
     { "id": "consistency_compare", "name": "Consistency Comparison", "tracks": ["rast_cons", "ko_cons", "bakta_cons", "ec_cons", "go_cons"], "sort": "low_consistency", "summary": "Compare consistency across annotation sources" }
@@ -89,7 +89,7 @@
     { "value": "avg_cons", "label": "Avg Consistency" },
     { "value": "localization", "label": "Localization" },
     { "value": "n_ko", "label": "# KEGG Terms" },
-    { "value": "n_modules", "label": "Module Hits" },
+    { "value": "essentiality", "label": "Essentiality" },
     { "value": "cluster_size", "label": "Cluster Size" },
     { "value": "specificity", "label": "Specificity" }
   ]
