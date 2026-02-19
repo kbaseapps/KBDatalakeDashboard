@@ -8,6 +8,7 @@ playwright.config.js
 
 # Screenshots and images
 *.png
+!kbase_logo.png
 *.jpg
 *.jpeg
 
