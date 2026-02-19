@@ -1,255 +1,1052 @@
 """
-Extract data from GenomeDataLakeTables SQLite database for heatmap viewer.
+Extract data from GenomeDataLakeTables SQLite database for the Datalake Dashboard.
 
-The GenomeDataLakeTables object contains multiple pangenomes (clades), each with
-a SQLite database stored in Shock. This module downloads the SQLite file and
-extracts data in the format expected by the genome-heatmap-viewer.
+Supports the new DB schema (2026+) with:
+- user_feature / pangenome_feature tables
+- Dynamic ontology columns (ontology_KEGG, ontology_COG, etc.)
+- kind='user' genome detection
+- genome_reaction, genome_gene_reaction_essentially_test, gene_phenotype tables
+
+Produces JSON files matching the format expected by the genome-heatmap-viewer:
+- genes_data.json (38-field arrays)
+- metadata.json
+- tree_data.json (linkage matrix + genome metadata)
+- reactions_data.json
+- summary_stats.json
+- ref_genomes_data.json
 """
 
 import json
+import logging
+import re
 import sqlite3
-import os
-import tempfile
+from collections import defaultdict
+
+logger = logging.getLogger(__name__)
+
+# Localization categories (must match config.json categories.localization)
+LOC_CATEGORIES = [
+    "Cytoplasmic", "CytoMembrane", "Periplasmic",
+    "OuterMembrane", "Extracellular", "Unknown",
+]
+LOC_MAP = {name: i for i, name in enumerate(LOC_CATEGORIES)}
+LOC_MAP.update({
+    "CytoplasmicMembrane": 1,
+    "Cytoplasmic Membrane": 1,
+    "Outer Membrane": 3,
+})
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+
+def count_terms(value):
+    """Count semicolon-separated terms in a string."""
+    if not value or not str(value).strip():
+        return 0
+    return len([t for t in str(value).split(";") if t.strip()])
+
+
+def safe_get(row, col, default=None):
+    """Safely get a column value from a sqlite3.Row, returning default if missing."""
+    try:
+        val = row[col]
+        return val if val is not None else default
+    except (IndexError, KeyError):
+        return default
+
+
+def parse_cluster_ids(raw):
+    """Parse pangenome_cluster value, handling new format with :size suffix.
+
+    Old format: 'clusterA; clusterB'
+    New format: 'clusterA:6; clusterB:41'
+
+    Returns list of bare cluster IDs (without size suffix).
+    """
+    if not raw or not str(raw).strip():
+        return []
+    parts = []
+    for part in str(raw).split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        # Strip :size suffix if present
+        if ":" in part:
+            part = part.rsplit(":", 1)[0].strip()
+        parts.append(part)
+    return parts
+
+
+def get_ontology_columns(conn, table_name):
+    """Discover ontology_* columns in a table via PRAGMA.
+
+    Returns dict mapping short names to actual column names:
+    {'KEGG': 'ontology_KEGG', 'COG': 'ontology_COG', ...}
+    """
+    cursor = conn.execute(f"PRAGMA table_info({table_name})")
+    ontology_cols = {}
+    for row in cursor.fetchall():
+        col_name = row[1]  # column name is index 1
+        if col_name.startswith("ontology_"):
+            short = col_name.replace("ontology_", "")
+            ontology_cols[short] = col_name
+    return ontology_cols
+
+
+def is_hypothetical(func):
+    """Check if a function string indicates a generic hypothetical protein."""
+    if not func or not func.strip():
+        return True
+    fl = func.strip().lower()
+    if fl == "hypothetical protein":
+        return True
+    if fl.startswith("fig") and fl.endswith("hypothetical protein"):
+        return True
+    return False
+
+
+def compute_consistency(user_annotation, cluster_annotations):
+    """Compute consistency: fraction of cluster members matching user annotation."""
+    if not cluster_annotations:
+        return -1
+    if not user_annotation or not str(user_annotation).strip():
+        return -1
+    matches = sum(1 for ann in cluster_annotations if ann == user_annotation)
+    return round(matches / len(cluster_annotations), 4)
+
+
+def compute_specificity(func, gene_names, ko, ec, cog, pfam, go):
+    """Compute annotation specificity (0.0-1.0)."""
+    if not func or not func.strip():
+        return 0.0
+    fl = func.lower().strip()
+    if fl == "hypothetical protein":
+        return 0.0
+
+    signals = []
+    if ec and str(ec).strip():
+        signals.append(0.9)
+    if ko and str(ko).strip():
+        signals.append(0.7)
+    if gene_names and str(gene_names).strip():
+        signals.append(0.6)
+    if cog and str(cog).strip():
+        signals.append(0.5)
+    if go and str(go).strip():
+        signals.append(0.5)
+    if pfam and str(pfam).strip():
+        signals.append(0.4)
+
+    base = max(signals) if signals else 0.3
+
+    if "ec " in fl or "(ec " in fl:
+        base = min(1.0, base + 0.1)
+
+    if "conserved protein" in fl and "unknown" in fl:
+        base = min(base, 0.2)
+    elif any(w in fl for w in ["hypothetical", "uncharacterized", "duf"]):
+        base = min(base, 0.3)
+    elif any(w in fl for w in ["putative", "predicted", "probable", "possible"]):
+        base = min(base, 0.5)
+
+    return round(base, 4)
+
+
+def derive_organism_name(user_genome_id, gtdb_taxonomy, ncbi_taxonomy):
+    """Derive a human-readable organism name from available metadata.
+
+    Priority: GTDB species name > NCBI species name > parsed genome ID.
+    """
+    # Try GTDB taxonomy (e.g., 'd__Bacteria;...;s__Escherichia coli')
+    for taxonomy in [gtdb_taxonomy, ncbi_taxonomy]:
+        if taxonomy and taxonomy.strip():
+            # Extract species from taxonomy string
+            parts = taxonomy.split(";")
+            for part in reversed(parts):
+                part = part.strip()
+                if part.startswith("s__") and len(part) > 3:
+                    return part[3:]
+
+    # Parse from genome ID (e.g., 'user_GCF_000005845.2.RAST')
+    name = user_genome_id.replace("user_", "").replace("_RAST", "")
+    name = name.replace("_", " ")
+    name = re.sub(r'\bK12\b', 'K-12', name)
+    return name
+
+
+# ── Main extraction functions ────────────────────────────────────────────
+
+
+def get_user_genome_id(db_path):
+    """Determine the user genome ID from the database.
+
+    Tries: kind='user' in genome table, then LIKE 'user_%' fallback.
+    """
+    conn = sqlite3.connect(db_path)
+
+    # New schema: kind='user'
+    try:
+        row = conn.execute(
+            "SELECT genome FROM genome WHERE kind = 'user' LIMIT 1"
+        ).fetchone()
+        if row:
+            conn.close()
+            return row[0]
+    except sqlite3.OperationalError:
+        pass
+
+    # Old schema fallback: LIKE 'user_%'
+    try:
+        row = conn.execute(
+            "SELECT genome FROM genome WHERE genome LIKE 'user_%' LIMIT 1"
+        ).fetchone()
+        if row:
+            conn.close()
+            return row[0]
+    except sqlite3.OperationalError:
+        pass
+
+    # Legacy schema fallback
+    try:
+        row = conn.execute(
+            "SELECT id FROM genome WHERE id LIKE 'user_%' LIMIT 1"
+        ).fetchone()
+        if row:
+            conn.close()
+            return row[0]
+    except sqlite3.OperationalError:
+        pass
+
+    conn.close()
+    raise ValueError("Could not determine user genome ID from database")
 
 
 def extract_genes_data(db_path, user_genome_id):
-    """
-    Extract gene data from SQLite database.
+    """Extract gene data as 38-field arrays for genes_data.json.
 
-    Expected output format for genes_data.json:
-    [
-        [id, fid, length, start, strand, conservation_frac, pan_category,
-         function, n_ko, n_cog, n_pfam, n_go, localization, rast_cons,
-         ko_cons, go_cons, ec_cons, avg_cons, bakta_cons, ec_avg_cons,
-         specificity],
-        ...
-    ]
-
-    Args:
-        db_path: Path to SQLite database file
-        user_genome_id: ID of the user genome (e.g., 'user_genome' or specific genome ID)
-
-    Returns:
-        List of gene arrays
+    Field indices match config.json:
+    [0]  ID           [1]  FID          [2]  LENGTH       [3]  START
+    [4]  STRAND       [5]  CONS_FRAC    [6]  PAN_CAT      [7]  FUNC
+    [8]  N_KO         [9]  N_COG        [10] N_PFAM       [11] N_GO
+    [12] LOC          [13] RAST_CONS    [14] KO_CONS      [15] GO_CONS
+    [16] EC_CONS      [17] AVG_CONS     [18] BAKTA_CONS   [19] EC_AVG_CONS
+    [20] SPECIFICITY  [21] IS_HYPO      [22] HAS_NAME     [23] N_EC
+    [24] AGREEMENT    [25] CLUSTER_SIZE [26] N_MODULES     [27] EC_MAP_CONS
+    [28] PROT_LEN     [29] REACTIONS    [30] RICH_FLUX     [31] RICH_CLASS
+    [32] MIN_FLUX     [33] MIN_CLASS    [34] PSORTB_NEW    [35] ESSENTIALITY
+    [36] N_PHENOTYPES [37] N_FITNESS
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
-    # Query genome_features table for the user genome
-    query = """
-        SELECT *
-        FROM genome_features
-        WHERE genome_id = ?
-        ORDER BY start
-    """
+    # Discover ontology columns in user_feature
+    ont_cols = get_ontology_columns(conn, "user_feature")
+    logger.info(f"Ontology columns in user_feature: {list(ont_cols.keys())}")
 
-    cursor = conn.execute(query, (user_genome_id,))
+    # Also discover columns in pangenome_feature for consistency computation
+    pf_ont_cols = get_ontology_columns(conn, "pangenome_feature")
+    logger.info(f"Ontology columns in pangenome_feature: {list(pf_ont_cols.keys())}")
+
+    # ── Count reference genomes in pangenome ────────────────────────────
+    n_ref = conn.execute(
+        "SELECT COUNT(DISTINCT genome) FROM pangenome_feature"
+    ).fetchone()[0]
+    logger.info(f"{n_ref} reference genomes in pangenome")
+
+    # ── Load pangenome cluster data ─────────────────────────────────────
+    logger.info("Loading pangenome cluster data...")
+
+    # cluster -> set of genome_ids (for conservation)
+    cluster_genomes = defaultdict(set)
+    for row in conn.execute("SELECT cluster, genome FROM pangenome_feature"):
+        cluster_genomes[row["cluster"]].add(row["genome"])
+
+    # cluster -> gene count (for cluster_size)
+    cluster_size = {}
+    for row in conn.execute(
+        "SELECT cluster, COUNT(*) as cnt FROM pangenome_feature GROUP BY cluster"
+    ):
+        cluster_size[row["cluster"]] = row["cnt"]
+
+    # cluster -> is_core flag
+    cluster_is_core = {}
+    for row in conn.execute(
+        "SELECT DISTINCT cluster FROM pangenome_feature WHERE is_core = 1"
+    ):
+        cluster_is_core[row["cluster"]] = True
+
+    # ── Load cluster annotations for consistency computation ────────────
+    logger.info("Loading cluster annotations for consistency computation...")
+
+    # Build SELECT with available ontology columns from pangenome_feature
+    pf_select_cols = ["cluster", "genome"]
+    consistency_sources = {}  # Maps source name to pangenome_feature column
+
+    for source, uf_col, pf_col_key in [
+        ("RAST", "RAST", "RAST"),
+        ("KEGG", "KEGG", "KEGG"),
+        ("GO", "GO", "GO"),
+        ("EC", "EC", "EC"),
+        ("bakta_product", "bakta_product", "bakta_product"),
+    ]:
+        if pf_col_key in pf_ont_cols:
+            pf_select_cols.append(pf_ont_cols[pf_col_key])
+            consistency_sources[source] = pf_ont_cols[pf_col_key]
+
+    cluster_ref_genes = defaultdict(list)
+    if len(pf_select_cols) > 2:
+        query = f"SELECT {', '.join(pf_select_cols)} FROM pangenome_feature WHERE cluster IS NOT NULL"
+        for row in conn.execute(query):
+            cluster_ref_genes[row["cluster"]].append(dict(row))
+
+    logger.info(f"Loaded annotations for {len(cluster_ref_genes)} clusters")
+
+    # ── Load essentiality data ──────────────────────────────────────────
+    logger.info("Loading essentiality data...")
+    gene_essentiality = {}
+    gene_flux = {}
+    try:
+        for row in conn.execute("""
+            SELECT gene_id,
+                   AVG(CASE WHEN rich_media_class = 'essential' THEN 1.0
+                            WHEN rich_media_class = 'variable' THEN 0.5
+                            ELSE 0.0 END) as avg_ess,
+                   MAX(rich_media_flux) as max_rich_flux,
+                   MAX(CASE WHEN rich_media_class IS NOT NULL THEN rich_media_class ELSE '' END) as rich_class,
+                   MAX(minimal_media_flux) as max_min_flux,
+                   MAX(CASE WHEN minimal_media_class IS NOT NULL THEN minimal_media_class ELSE '' END) as min_class
+            FROM genome_gene_reaction_essentially_test
+            WHERE genome_id = ?
+            GROUP BY gene_id
+        """, (user_genome_id,)):
+            gene_essentiality[row["gene_id"]] = round(row["avg_ess"], 4) if row["avg_ess"] is not None else -1
+            gene_flux[row["gene_id"]] = {
+                "rich_flux": row["max_rich_flux"] if row["max_rich_flux"] is not None else -1,
+                "rich_class": row["rich_class"] or "",
+                "min_flux": row["max_min_flux"] if row["max_min_flux"] is not None else -1,
+                "min_class": row["min_class"] or "",
+            }
+        logger.info(f"  {len(gene_essentiality)} genes with essentiality data")
+    except sqlite3.OperationalError:
+        logger.info("  (essentiality table not found)")
+
+    # ── Load reaction assignments per gene ──────────────────────────────
+    logger.info("Loading reaction assignments...")
+    gene_reactions = defaultdict(set)
+    try:
+        for row in conn.execute("""
+            SELECT genes, reaction_id
+            FROM genome_reaction
+            WHERE genome_id = ?
+        """, (user_genome_id,)):
+            gene_str = row["genes"] or ""
+            rxn_id = row["reaction_id"]
+            # Extract gene IDs from boolean expression like "geneA or (geneB and geneC)"
+            tags = re.findall(r"[A-Za-z][A-Za-z0-9_]+", gene_str)
+            tags = [t for t in tags if t.lower() not in ("or", "and")]
+            for tag in tags:
+                gene_reactions[tag].add(rxn_id)
+        logger.info(f"  {len(gene_reactions)} genes with reaction assignments")
+    except sqlite3.OperationalError:
+        logger.info("  (genome_reaction table not found)")
+
+    # ── Load phenotype data ─────────────────────────────────────────────
+    logger.info("Loading phenotype data...")
+    gene_phenotype_counts = defaultdict(set)
+    gene_fitness_counts = defaultdict(int)
+    try:
+        for row in conn.execute("""
+            SELECT gene_id, phenotype_id, fitness_match
+            FROM gene_phenotype
+            WHERE genome_id = ?
+        """, (user_genome_id,)):
+            gene_phenotype_counts[row["gene_id"]].add(row["phenotype_id"])
+            if row["fitness_match"] and str(row["fitness_match"]).lower() == "yes":
+                gene_fitness_counts[row["gene_id"]] += 1
+        logger.info(f"  {len(gene_phenotype_counts)} genes with phenotype data")
+    except sqlite3.OperationalError:
+        logger.info("  (gene_phenotype table not found)")
+
+    # ── Load user genome features ───────────────────────────────────────
+    logger.info(f"Loading user features for {user_genome_id}...")
+    feature_rows = conn.execute("""
+        SELECT * FROM user_feature
+        WHERE genome = ? AND type = 'gene'
+        ORDER BY start, feature_id
+    """, (user_genome_id,)).fetchall()
+    logger.info(f"  {len(feature_rows)} gene features loaded")
+
+    # ── Process each gene ───────────────────────────────────────────────
+    logger.info("Processing genes...")
+    flux_class_map = {"essential": 0, "variable": 1, "blocked": 2,
+                      "forward_only": 1, "reverse_only": 1}
     genes = []
 
-    for idx, row in enumerate(cursor.fetchall()):
-        # Extract data in the order expected by genome-heatmap-viewer
+    for order_idx, row in enumerate(feature_rows):
+        fid = row["feature_id"]
+        length = row["length"]
+        start = row["start"]
+        strand = 1 if row["strand"] == "+" else 0
+
+        # FUNC: use bakta_product (RAST not available in new schema)
+        bakta_func = safe_get(row, ont_cols.get("bakta_product", ""), "")
+        rast_func = safe_get(row, ont_cols.get("RAST", ""), "")
+        func = rast_func if rast_func and str(rast_func).strip() else bakta_func
+        if not func or not str(func).strip():
+            func = "hypothetical protein"
+
+        # Ontology term counts
+        n_ko = count_terms(safe_get(row, ont_cols.get("KEGG", ""), ""))
+        n_cog = count_terms(safe_get(row, ont_cols.get("COG", ""), ""))
+        n_pfam = count_terms(safe_get(row, ont_cols.get("PFAM", ""), ""))
+        n_go = count_terms(safe_get(row, ont_cols.get("GO", ""), ""))
+        n_ec = count_terms(safe_get(row, ont_cols.get("EC", ""), ""))
+
+        # Localization (PSORTb)
+        psortb = safe_get(row, ont_cols.get("primary_localization_psortb", ""), "Unknown") or "Unknown"
+        loc = LOC_MAP.get(psortb, LOC_MAP["Unknown"])
+
+        # Secondary localization
+        psortb_new_str = safe_get(row, ont_cols.get("secondary_localization_psortb", ""), "Unknown") or "Unknown"
+        psortb_new = LOC_MAP.get(psortb_new_str, LOC_MAP["Unknown"])
+
+        # ── Pangenome cluster data ──────────────────────────────────────
+        cluster_ids = parse_cluster_ids(row["pangenome_cluster"])
+        is_core_raw = row["pangenome_is_core"]
+
+        if cluster_ids:
+            best_cons = 0
+            best_size = 0
+            any_core = False
+            for cid in cluster_ids:
+                n_with = len(cluster_genomes.get(cid, set()))
+                ccons = n_with / n_ref if n_ref > 0 else 0
+                if ccons > best_cons:
+                    best_cons = ccons
+                csize = cluster_size.get(cid, 0)
+                if csize > best_size:
+                    best_size = csize
+                if cid in cluster_is_core:
+                    any_core = True
+            cons_frac = round(best_cons, 4)
+            clust_size = best_size
+
+            if is_core_raw == 1:
+                pan_cat = 2
+            elif is_core_raw == 0:
+                pan_cat = 1
+            else:
+                pan_cat = 2 if any_core else 1
+        else:
+            cons_frac = 0
+            pan_cat = 0
+            clust_size = 0
+
+        # ── Consistency scores ──────────────────────────────────────────
+        if cluster_ids:
+            all_rast_cons = []
+            all_ko_cons = []
+            all_go_cons = []
+            all_ec_cons = []
+            all_bakta_cons = []
+
+            for cid in cluster_ids:
+                ref_genes = cluster_ref_genes.get(cid, [])
+                if not ref_genes:
+                    continue
+
+                # RAST consistency (if ontology_RAST exists)
+                rast_col = consistency_sources.get("RAST")
+                if rast_col and rast_func:
+                    ref_vals = [g[rast_col] for g in ref_genes if g.get(rast_col)]
+                    if ref_vals:
+                        all_rast_cons.append(compute_consistency(rast_func, ref_vals))
+
+                # KEGG consistency
+                kegg_col = consistency_sources.get("KEGG")
+                user_kegg = safe_get(row, ont_cols.get("KEGG", ""), "")
+                if kegg_col and user_kegg:
+                    ref_vals = [g[kegg_col] for g in ref_genes if g.get(kegg_col)]
+                    if ref_vals:
+                        all_ko_cons.append(compute_consistency(user_kegg, ref_vals))
+
+                # GO consistency
+                go_col = consistency_sources.get("GO")
+                user_go = safe_get(row, ont_cols.get("GO", ""), "")
+                if go_col and user_go:
+                    ref_vals = [g[go_col] for g in ref_genes if g.get(go_col)]
+                    if ref_vals:
+                        all_go_cons.append(compute_consistency(user_go, ref_vals))
+
+                # EC consistency
+                ec_col = consistency_sources.get("EC")
+                user_ec = safe_get(row, ont_cols.get("EC", ""), "")
+                if ec_col and user_ec:
+                    ref_vals = [g[ec_col] for g in ref_genes if g.get(ec_col)]
+                    if ref_vals:
+                        all_ec_cons.append(compute_consistency(user_ec, ref_vals))
+
+                # Bakta consistency
+                bakta_col = consistency_sources.get("bakta_product")
+                if bakta_col and bakta_func:
+                    ref_vals = [g[bakta_col] for g in ref_genes if g.get(bakta_col)]
+                    if ref_vals:
+                        all_bakta_cons.append(compute_consistency(bakta_func, ref_vals))
+
+            rast_cons = max(all_rast_cons) if all_rast_cons else -1
+            ko_cons = max(all_ko_cons) if all_ko_cons else -1
+            go_cons = max(all_go_cons) if all_go_cons else -1
+            ec_cons = max(all_ec_cons) if all_ec_cons else -1
+            bakta_cons = max(all_bakta_cons) if all_bakta_cons else -1
+
+            cons_scores = [s for s in [rast_cons, ko_cons, go_cons, ec_cons, bakta_cons] if s >= 0]
+            avg_cons = round(sum(cons_scores) / len(cons_scores), 4) if cons_scores else -1
+            ec_avg_cons = ec_cons
+            ec_map_cons = -1
+        else:
+            rast_cons = ko_cons = go_cons = ec_cons = avg_cons = bakta_cons = ec_avg_cons = ec_map_cons = -1
+
+        # ── Annotation specificity ──────────────────────────────────────
+        aliases = safe_get(row, "aliases", "")
+        if cluster_ids:
+            specificity = compute_specificity(
+                func, aliases,
+                safe_get(row, ont_cols.get("KEGG", ""), ""),
+                safe_get(row, ont_cols.get("EC", ""), ""),
+                safe_get(row, ont_cols.get("COG", ""), ""),
+                safe_get(row, ont_cols.get("PFAM", ""), ""),
+                safe_get(row, ont_cols.get("GO", ""), ""),
+            )
+        else:
+            specificity = -1
+
+        # ── Derived fields ──────────────────────────────────────────────
+        rast_is_hypo = is_hypothetical(rast_func) if rast_func else True
+        bakta_is_hypo = is_hypothetical(bakta_func)
+        is_hypo_val = 1 if rast_is_hypo and bakta_is_hypo else 0
+
+        has_name = 1 if aliases and str(aliases).strip() else 0
+
+        # AGREEMENT: RAST/Bakta (or KEGG/Bakta if no RAST)
+        if rast_func and rast_func.strip():
+            if rast_is_hypo and bakta_is_hypo:
+                agreement = 0
+            elif rast_is_hypo or bakta_is_hypo:
+                agreement = 1
+            elif rast_func.strip() == (bakta_func or "").strip():
+                agreement = 3
+            else:
+                agreement = 2
+        else:
+            # No RAST: use KEGG vs Bakta
+            user_kegg = safe_get(row, ont_cols.get("KEGG", ""), "")
+            if not user_kegg and bakta_is_hypo:
+                agreement = 0
+            elif not user_kegg or bakta_is_hypo:
+                agreement = 1
+            else:
+                agreement = 2  # Both have annotations but different sources
+
+        # N_MODULES (skip if no KEGG data)
+        n_modules = 0
+
+        # Protein length
+        protein_seq = safe_get(row, "protein_sequence", "")
+        if protein_seq and len(protein_seq) > 10:
+            prot_len = len(protein_seq)
+        else:
+            prot_len = length // 3 if length else 0
+
+        # Reactions
+        reactions = ";".join(sorted(gene_reactions.get(fid, set())))
+
+        # Flux data
+        flux_data = gene_flux.get(fid, {})
+        rich_flux = flux_data.get("rich_flux", -1)
+        rich_class = flux_class_map.get(flux_data.get("rich_class", ""), -1)
+        min_flux = flux_data.get("min_flux", -1)
+        min_class = flux_class_map.get(flux_data.get("min_class", ""), -1)
+
+        # Essentiality
+        essentiality = gene_essentiality.get(fid, -1)
+
+        # Phenotype data
+        n_phenotypes = len(gene_phenotype_counts.get(fid, set()))
+        n_fitness = gene_fitness_counts.get(fid, 0)
+
+        # ── Build 38-field gene array ───────────────────────────────────
         gene = [
-            idx,  # id (index)
-            row['feature_id'],  # fid
-            row['protein_length'],  # length
-            row['start'],  # start
-            row['strand'],  # strand
-            row.get('pangenome_conservation_fraction', 0.0),  # conservation_frac
-            row.get('pangenome_category', 0),  # pan_category (0=unknown, 1=accessory, 2=core)
-            row['rast_function'] or row.get('bakta_function', 'hypothetical protein'),  # function
-            count_terms(row.get('ko', '')),  # n_ko
-            count_terms(row.get('cog', '')),  # n_cog
-            count_terms(row.get('pfam', '')),  # n_pfam
-            count_terms(row.get('go', '')),  # n_go
-            row.get('psortb_localization', 'Unknown'),  # localization
-            row.get('rast_annotation_consistency', -1.0),  # rast_cons
-            row.get('ko_annotation_consistency', -1.0),  # ko_cons
-            row.get('go_annotation_consistency', -1.0),  # go_cons
-            row.get('ec_annotation_consistency', -1.0),  # ec_cons
-            row.get('avg_annotation_consistency', -1.0),  # avg_cons
-            row.get('bakta_annotation_consistency', -1.0),  # bakta_cons
-            row.get('ec_map_annotation_consistency', -1.0),  # ec_avg_cons
-            row.get('annotation_specificity', 0.5),  # specificity
+            order_idx,      # [0]  ID
+            fid,            # [1]  FID
+            length,         # [2]  LENGTH (bp)
+            start,          # [3]  START
+            strand,         # [4]  STRAND
+            cons_frac,      # [5]  CONS_FRAC
+            pan_cat,        # [6]  PAN_CAT
+            func,           # [7]  FUNC
+            n_ko,           # [8]  N_KO
+            n_cog,          # [9]  N_COG
+            n_pfam,         # [10] N_PFAM
+            n_go,           # [11] N_GO
+            loc,            # [12] LOC
+            rast_cons,      # [13] RAST_CONS
+            ko_cons,        # [14] KO_CONS
+            go_cons,        # [15] GO_CONS
+            ec_cons,        # [16] EC_CONS
+            avg_cons,       # [17] AVG_CONS
+            bakta_cons,     # [18] BAKTA_CONS
+            ec_avg_cons,    # [19] EC_AVG_CONS
+            specificity,    # [20] SPECIFICITY
+            is_hypo_val,    # [21] IS_HYPO
+            has_name,       # [22] HAS_NAME
+            n_ec,           # [23] N_EC
+            agreement,      # [24] AGREEMENT
+            clust_size,     # [25] CLUSTER_SIZE
+            n_modules,      # [26] N_MODULES
+            ec_map_cons,    # [27] EC_MAP_CONS
+            prot_len,       # [28] PROT_LEN
+            reactions,      # [29] REACTIONS
+            rich_flux,      # [30] RICH_FLUX
+            rich_class,     # [31] RICH_CLASS
+            min_flux,       # [32] MIN_FLUX
+            min_class,      # [33] MIN_CLASS
+            psortb_new,     # [34] PSORTB_NEW
+            essentiality,   # [35] ESSENTIALITY
+            n_phenotypes,   # [36] N_PHENOTYPES
+            n_fitness,      # [37] N_FITNESS
         ]
         genes.append(gene)
 
     conn.close()
+    logger.info(f"Processed {len(genes)} genes with {len(genes[0]) if genes else 0} fields each")
     return genes
 
 
-def extract_metadata(db_path, user_genome_id, pangenome_taxonomy):
-    """
-    Extract organism metadata.
-
-    Args:
-        db_path: Path to SQLite database file
-        user_genome_id: ID of the user genome
-        pangenome_taxonomy: Taxonomy string from PangenomeData
-
-    Returns:
-        Dictionary with organism metadata
-    """
+def extract_metadata(db_path, user_genome_id, pangenome_id=""):
+    """Extract organism metadata for metadata.json."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
-    # Query genome table for organism info
-    query = "SELECT * FROM genome WHERE genome_id = ? LIMIT 1"
-    cursor = conn.execute(query, (user_genome_id,))
-    row = cursor.fetchone()
+    # Query genome table for user genome
+    row = conn.execute(
+        "SELECT * FROM genome WHERE genome = ? LIMIT 1", (user_genome_id,)
+    ).fetchone()
 
-    if row:
-        metadata = {
-            "organism": row.get('organism_name', pangenome_taxonomy),
-            "genome_id": user_genome_id,
-            "taxonomy": pangenome_taxonomy,
-            "ncbi_taxonomy": row.get('ncbi_taxonomy', ''),
-            "n_contigs": row.get('n_contigs', 0),
-            "n_features": row.get('n_features', 0),
-        }
-    else:
-        # Fallback if genome table doesn't exist or has no data
-        metadata = {
-            "organism": pangenome_taxonomy,
-            "genome_id": user_genome_id,
-            "taxonomy": pangenome_taxonomy,
-        }
+    gtdb_tax = safe_get(row, "gtdb_taxonomy", "") if row else ""
+    ncbi_tax = safe_get(row, "ncbi_taxonomy", "") if row else ""
+
+    # If user genome has no taxonomy, try alternatives:
+    # 1. Use pangenome_id as a genome lookup (it's typically a reference genome ID)
+    # 2. Use a clade_member genome (these are the close relatives)
+    # 3. Fall back to clade representatives
+    if not gtdb_tax and not ncbi_tax:
+        if pangenome_id:
+            pg_row = conn.execute(
+                "SELECT gtdb_taxonomy, ncbi_taxonomy FROM genome WHERE genome = ? LIMIT 1",
+                (pangenome_id,)
+            ).fetchone()
+            if pg_row:
+                gtdb_tax = safe_get(pg_row, "gtdb_taxonomy", "")
+                ncbi_tax = safe_get(pg_row, "ncbi_taxonomy", "")
+
+    if not gtdb_tax and not ncbi_tax:
+        clade_row = conn.execute(
+            "SELECT gtdb_taxonomy, ncbi_taxonomy FROM genome WHERE kind = 'clade_member' LIMIT 1"
+        ).fetchone()
+        if clade_row:
+            gtdb_tax = safe_get(clade_row, "gtdb_taxonomy", "")
+            ncbi_tax = safe_get(clade_row, "ncbi_taxonomy", "")
+
+    organism_name = derive_organism_name(user_genome_id, gtdb_tax, ncbi_tax)
+
+    # Count genes
+    n_genes = conn.execute(
+        "SELECT COUNT(*) FROM user_feature WHERE genome = ? AND type = 'gene'",
+        (user_genome_id,)
+    ).fetchone()[0]
+
+    # Count reference genomes (clade_member genomes in pangenome)
+    n_ref_genomes = conn.execute(
+        "SELECT COUNT(DISTINCT genome) FROM pangenome_feature"
+    ).fetchone()[0]
+
+    # Count contigs
+    n_contigs = conn.execute(
+        "SELECT COUNT(DISTINCT contig) FROM user_feature WHERE genome = ?",
+        (user_genome_id,)
+    ).fetchone()[0]
+
+    metadata = {
+        "organism": organism_name,
+        "genome_id": user_genome_id,
+        "pangenome_id": pangenome_id,
+        "genome_assembly": pangenome_id or "Unknown",
+        "n_ref_genomes": n_ref_genomes,
+        "n_genes": n_genes,
+        "n_contigs": n_contigs,
+        "taxonomy": gtdb_tax or ncbi_tax or "Unknown",
+        "database_type": "GenomeDataLakeTables",
+    }
 
     conn.close()
     return metadata
 
 
-def extract_tree_data(db_path):
-    """
-    Extract phylogenetic tree data.
+def extract_tree_data(db_path, user_genome_id):
+    """Extract phylogenetic tree data (Jaccard-based UPGMA).
 
-    Returns:
-        Dictionary with tree structure (Newick format)
-    """
-    conn = sqlite3.connect(db_path)
-
-    # Check if phylogenetic_tree table exists
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='phylogenetic_tree'"
-    )
-
-    if cursor.fetchone():
-        cursor = conn.execute("SELECT newick FROM phylogenetic_tree LIMIT 1")
-        row = cursor.fetchone()
-        if row:
-            conn.close()
-            return {"newick": row[0]}
-
-    conn.close()
-    return {}
-
-
-def extract_reactions_data(db_path, user_genome_id):
-    """
-    Extract metabolic reactions.
-
-    Returns:
-        List of reaction dictionaries
+    Computes distances from pangenome cluster presence/absence,
+    builds UPGMA linkage, and collects genome metadata + ANI.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
-    reactions = []
+    # ── Load cluster sets per genome ────────────────────────────────────
+    logger.info("Loading cluster sets for tree computation...")
 
-    # Check if reactions table exists
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='model_reactions'"
-    )
+    # Reference genomes from pangenome_feature
+    ref_clusters = defaultdict(set)
+    for row in conn.execute("SELECT genome, cluster FROM pangenome_feature WHERE cluster IS NOT NULL"):
+        ref_clusters[row["genome"]].add(row["cluster"])
 
-    if cursor.fetchone():
-        query = """
-            SELECT *
-            FROM model_reactions
-            WHERE genome_id = ?
-        """
-        cursor = conn.execute(query, (user_genome_id,))
+    # User genome from user_feature
+    user_clusters = set()
+    for row in conn.execute("""
+        SELECT pangenome_cluster FROM user_feature
+        WHERE genome = ? AND pangenome_cluster IS NOT NULL
+    """, (user_genome_id,)):
+        for cid in parse_cluster_ids(row["pangenome_cluster"]):
+            user_clusters.add(cid)
 
-        for row in cursor.fetchall():
-            reaction = {
-                "reaction_id": row['reaction_id'],
-                "name": row.get('name', ''),
-                "equation": row.get('equation', ''),
-                "genes": row.get('genes', '').split(';') if row.get('genes') else [],
-                "flux_min": row.get('flux_min', 0.0),
-                "flux_max": row.get('flux_max', 0.0),
-                "is_essential": row.get('is_essential', 0),
-                "is_gapfilled": row.get('is_gapfilled', 0),
-            }
-            reactions.append(reaction)
+    logger.info(f"  User genome has {len(user_clusters)} clusters, {len(ref_clusters)} ref genomes")
+
+    # Combine: user first, then refs sorted
+    all_clusters_by_genome = {user_genome_id: user_clusters}
+    for gid in sorted(ref_clusters.keys()):
+        all_clusters_by_genome[gid] = ref_clusters[gid]
+
+    genome_ids = list(all_clusters_by_genome.keys())
+    n_genomes = len(genome_ids)
+
+    if n_genomes < 2:
+        conn.close()
+        return {"genome_ids": genome_ids, "user_genome_id": user_genome_id,
+                "stats": {"n_genomes": n_genomes, "n_clusters": len(user_clusters)}}
+
+    # ── Build binary matrix and compute distances ───────────────────────
+    all_cluster_ids = set()
+    for clusters in all_clusters_by_genome.values():
+        all_cluster_ids.update(clusters)
+    all_cluster_ids = sorted(all_cluster_ids)
+    cluster_to_idx = {cid: i for i, cid in enumerate(all_cluster_ids)}
+    n_clusters = len(all_cluster_ids)
+
+    try:
+        import numpy as np
+        from scipy.cluster.hierarchy import leaves_list, linkage
+        from scipy.spatial.distance import pdist, squareform
+
+        matrix = np.zeros((n_genomes, n_clusters), dtype=np.uint8)
+        for gi, gid in enumerate(genome_ids):
+            for cid in all_clusters_by_genome[gid]:
+                if cid in cluster_to_idx:
+                    matrix[gi, cluster_to_idx[cid]] = 1
+
+        condensed = pdist(matrix, metric="jaccard")
+        dist_matrix = squareform(condensed)
+        Z = linkage(condensed, method="average")
+        leaf_order = [genome_ids[i] for i in leaves_list(Z)]
+        linkage_data = Z.tolist()
+
+        stats = {
+            "n_genomes": n_genomes,
+            "n_clusters": n_clusters,
+            "n_reference": n_genomes - 1,
+            "max_distance": round(float(condensed.max()), 4),
+            "min_distance": round(float(condensed.min()), 4),
+        }
+    except ImportError:
+        logger.warning("numpy/scipy not available, skipping tree computation")
+        leaf_order = genome_ids
+        linkage_data = []
+        stats = {"n_genomes": n_genomes, "n_clusters": n_clusters, "n_reference": n_genomes - 1}
+
+    # ── Genome metadata ─────────────────────────────────────────────────
+    genome_table = {}
+    for row in conn.execute("SELECT * FROM genome"):
+        genome_table[row["genome"]] = dict(row)
+
+    # ANI data
+    ani_data = {}
+    try:
+        for row in conn.execute(
+            "SELECT genome1, genome2, ani FROM ani WHERE genome1 = ? OR genome2 = ?",
+            (user_genome_id, user_genome_id)
+        ):
+            other = row["genome2"] if row["genome1"] == user_genome_id else row["genome1"]
+            ani_data[other] = round(row["ani"], 4) if row["ani"] else None
+    except sqlite3.OperationalError:
+        pass
+
+    metadata = {}
+    for gid in genome_ids:
+        gdata = genome_table.get(gid, {})
+        metadata[gid] = {
+            "taxonomy": gdata.get("gtdb_taxonomy") or gdata.get("ncbi_taxonomy") or "Unknown",
+            "n_features": gdata.get("size", 0),
+            "n_contigs": 0,
+            "ani_to_user": ani_data.get(gid) if gid != user_genome_id else 1.0,
+            "kind": gdata.get("kind", "unknown"),
+            "checkm_completeness": gdata.get("checkm_completeness"),
+            "checkm_contamination": gdata.get("checkm_contamination"),
+        }
+
+    # Per-genome stats
+    genome_stats = {}
+    for gid in genome_ids:
+        clusters = all_clusters_by_genome[gid]
+        if gid == user_genome_id:
+            n_genes = conn.execute(
+                "SELECT COUNT(*) FROM user_feature WHERE genome = ? AND type = 'gene'",
+                (gid,)
+            ).fetchone()[0]
+            core_count = conn.execute(
+                "SELECT COUNT(*) FROM user_feature WHERE genome = ? AND pangenome_is_core = 1",
+                (gid,)
+            ).fetchone()[0]
+        else:
+            n_genes = conn.execute(
+                "SELECT COUNT(*) FROM pangenome_feature WHERE genome = ?",
+                (gid,)
+            ).fetchone()[0]
+            core_count = conn.execute(
+                "SELECT COUNT(*) FROM pangenome_feature WHERE genome = ? AND is_core = 1",
+                (gid,)
+            ).fetchone()[0]
+
+        genome_stats[gid] = {
+            "n_genes": n_genes,
+            "n_clusters": len(clusters),
+            "core_pct": round(core_count / n_genes, 4) if n_genes > 0 else 0,
+        }
 
     conn.close()
-    return reactions
+
+    return {
+        "linkage": linkage_data,
+        "genome_ids": genome_ids,
+        "leaf_order": leaf_order,
+        "user_genome_id": user_genome_id,
+        "genome_metadata": metadata,
+        "genome_stats": genome_stats,
+        "stats": stats,
+    }
+
+
+def extract_reactions_data(db_path, user_genome_id, genes_data=None):
+    """Extract metabolic reactions for reactions_data.json."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    # Check if genome_reaction table exists
+    if not conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='genome_reaction'"
+    ).fetchone():
+        conn.close()
+        return {"user_genome": user_genome_id, "n_genomes": 0, "reactions": {}, "gene_index": {}, "stats": {}}
+
+    # Count total genomes with reactions
+    n_genomes = conn.execute(
+        "SELECT COUNT(DISTINCT genome_id) FROM genome_reaction"
+    ).fetchone()[0]
+
+    # Count genomes per reaction (for conservation)
+    rxn_genomes = defaultdict(set)
+    for row in conn.execute("SELECT reaction_id, genome_id FROM genome_reaction"):
+        rxn_genomes[row["reaction_id"]].add(row["genome_id"])
+
+    # Extract user genome reactions
+    reactions = {}
+    for row in conn.execute("""
+        SELECT reaction_id, genes, equation_names, equation_ids, directionality,
+               gapfilling_status, rich_media_flux, rich_media_class,
+               minimal_media_flux, minimal_media_class
+        FROM genome_reaction
+        WHERE genome_id = ?
+    """, (user_genome_id,)):
+        rxn_id = row["reaction_id"]
+        n_with = len(rxn_genomes.get(rxn_id, set()))
+        conservation = round(n_with / n_genomes, 4) if n_genomes > 0 else 0
+
+        flux_rich = row["rich_media_flux"] if row["rich_media_flux"] is not None else 0
+        flux_min = row["minimal_media_flux"] if row["minimal_media_flux"] is not None else 0
+        class_rich = row["rich_media_class"] or "blocked"
+        class_min = row["minimal_media_class"] or "blocked"
+
+        reactions[rxn_id] = {
+            "genes": row["genes"] or "",
+            "equation": row["equation_names"] or "",
+            "equation_ids": row["equation_ids"] or "",
+            "directionality": row["directionality"] or "reversible",
+            "gapfilling": row["gapfilling_status"] or "none",
+            "conservation": conservation,
+            "flux_rich": round(flux_rich, 6),
+            "flux_min": round(flux_min, 6),
+            "class_rich": class_rich,
+            "class_min": class_min,
+        }
+
+    conn.close()
+
+    # Build gene index from genes_data if provided
+    gene_index = {}
+    if genes_data:
+        fid_to_idx = {str(g[1]): i for i, g in enumerate(genes_data)}
+        all_locus_tags = set()
+        for rxn in reactions.values():
+            gene_str = rxn["genes"]
+            if gene_str:
+                tags = re.findall(r"[A-Za-z][A-Za-z0-9_]+", gene_str)
+                tags = [t for t in tags if t.lower() not in ("or", "and")]
+                all_locus_tags.update(tags)
+
+        for tag in all_locus_tags:
+            if tag in fid_to_idx:
+                gene_index[tag] = [fid_to_idx[tag]]
+            else:
+                matches = [idx for fid, idx in fid_to_idx.items() if tag in fid]
+                if matches:
+                    gene_index[tag] = matches
+
+    # Compute stats
+    active_rich = sum(1 for r in reactions.values() if r["class_rich"] != "blocked")
+    active_min = sum(1 for r in reactions.values() if r["class_min"] != "blocked")
+    essential_rich = sum(1 for r in reactions.values() if "essential" in r["class_rich"])
+    essential_min = sum(1 for r in reactions.values() if "essential" in r["class_min"])
+
+    stats = {
+        "total_reactions": len(reactions),
+        "active_rich": active_rich,
+        "active_min": active_min,
+        "essential_rich": essential_rich,
+        "essential_min": essential_min,
+        "blocked_rich": len(reactions) - active_rich,
+        "blocked_min": len(reactions) - active_min,
+    }
+
+    return {
+        "user_genome": user_genome_id,
+        "n_genomes": n_genomes,
+        "reactions": reactions,
+        "gene_index": gene_index,
+        "stats": stats,
+    }
 
 
 def extract_summary_stats(db_path, user_genome_id):
-    """
-    Extract or compute summary statistics.
-
-    Returns:
-        Dictionary with precomputed statistics
-    """
+    """Extract summary statistics for summary_stats.json."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
-    # Count genes by pangenome category
-    query = """
-        SELECT
-            pangenome_category,
-            COUNT(*) as count
-        FROM genome_features
-        WHERE genome_id = ?
-        GROUP BY pangenome_category
-    """
-    cursor = conn.execute(query, (user_genome_id,))
+    summary = {}
 
-    stats = {
-        "total_genes": 0,
-        "core_genes": 0,
-        "accessory_genes": 0,
-        "unknown_genes": 0,
+    # ── Gene category counts ────────────────────────────────────────────
+    core = conn.execute(
+        "SELECT COUNT(*) FROM user_feature WHERE genome = ? AND pangenome_is_core = 1",
+        (user_genome_id,)
+    ).fetchone()[0]
+    accessory = conn.execute(
+        "SELECT COUNT(*) FROM user_feature WHERE genome = ? AND pangenome_is_core = 0",
+        (user_genome_id,)
+    ).fetchone()[0]
+    total = conn.execute(
+        "SELECT COUNT(*) FROM user_feature WHERE genome = ? AND type = 'gene'",
+        (user_genome_id,)
+    ).fetchone()[0]
+
+    summary["gene_categories"] = {
+        "total_genes": total,
+        "core_genes": core,
+        "accessory_genes": accessory,
+        "unknown_genes": total - core - accessory,
     }
 
-    for row in cursor.fetchall():
-        category = row['pangenome_category']
-        count = row['count']
-        stats["total_genes"] += count
-        if category == 2:
-            stats["core_genes"] = count
-        elif category == 1:
-            stats["accessory_genes"] = count
-        else:
-            stats["unknown_genes"] = count
+    # ── Growth phenotype summary (from genome_phenotype) ────────────────
+    try:
+        positive = conn.execute(
+            "SELECT COUNT(*) FROM genome_phenotype WHERE genome_id = ? AND class = 'P'",
+            (user_genome_id,)
+        ).fetchone()[0]
+        negative = conn.execute(
+            "SELECT COUNT(*) FROM genome_phenotype WHERE genome_id = ? AND class = 'N'",
+            (user_genome_id,)
+        ).fetchone()[0]
+        summary["growth_phenotypes"] = {
+            "positive_growth": positive,
+            "negative_growth": negative,
+            "total_phenotypes": positive + negative,
+        }
+    except sqlite3.OperationalError:
+        summary["growth_phenotypes"] = None
+
+    # ── Genome comparison stats ─────────────────────────────────────────
+    n_ref = conn.execute(
+        "SELECT COUNT(DISTINCT genome) FROM pangenome_feature"
+    ).fetchone()[0]
+
+    closest_ani = None
+    try:
+        row = conn.execute("""
+            SELECT MAX(ani) as max_ani FROM ani
+            WHERE genome1 = ? OR genome2 = ?
+        """, (user_genome_id, user_genome_id)).fetchone()
+        if row and row["max_ani"]:
+            closest_ani = round(row["max_ani"], 4)
+    except sqlite3.OperationalError:
+        pass
+
+    summary["comparison"] = {
+        "n_reference_genomes": n_ref,
+        "closest_ani": closest_ani,
+    }
+
+    # ── Reaction stats ──────────────────────────────────────────────────
+    try:
+        n_reactions = conn.execute(
+            "SELECT COUNT(*) FROM genome_reaction WHERE genome_id = ?",
+            (user_genome_id,)
+        ).fetchone()[0]
+        n_gapfilled = conn.execute(
+            "SELECT COUNT(*) FROM genome_reaction WHERE genome_id = ? AND gapfilling_status != 'none'",
+            (user_genome_id,)
+        ).fetchone()[0]
+        summary["reactions"] = {
+            "total_reactions": n_reactions,
+            "gapfilled_reactions": n_gapfilled,
+        }
+    except sqlite3.OperationalError:
+        summary["reactions"] = None
 
     conn.close()
-    return stats
+    return summary
 
 
 def extract_ref_genomes_data(db_path):
-    """
-    Extract reference genomes metadata.
-
-    Returns:
-        List of reference genome dictionaries
-    """
+    """Extract reference genome metadata for ref_genomes_data.json."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
     ref_genomes = []
-
-    # Query genome table for all genomes
-    query = "SELECT * FROM genome ORDER BY organism_name"
-    cursor = conn.execute(query)
-
-    for row in cursor.fetchall():
+    for row in conn.execute("SELECT * FROM genome ORDER BY genome"):
         genome = {
-            "genome_id": row['genome_id'],
-            "organism": row.get('organism_name', ''),
-            "ncbi_taxonomy": row.get('ncbi_taxonomy', ''),
-            "n_features": row.get('n_features', 0),
+            "genome_id": row["genome"],
+            "kind": safe_get(row, "kind", "unknown"),
+            "gtdb_taxonomy": safe_get(row, "gtdb_taxonomy", ""),
+            "ncbi_taxonomy": safe_get(row, "ncbi_taxonomy", ""),
+            "size": safe_get(row, "size", 0),
+            "checkm_completeness": safe_get(row, "checkm_completeness"),
+            "checkm_contamination": safe_get(row, "checkm_contamination"),
         }
         ref_genomes.append(genome)
 
@@ -257,95 +1054,37 @@ def extract_ref_genomes_data(db_path):
     return ref_genomes
 
 
-def extract_cluster_data(db_path):
+def extract_all(db_path, pangenome_id=""):
+    """Extract all data files from a single SQLite database.
+
+    Returns dict of {filename: data} ready to be written as JSON files.
     """
-    Extract pangenome cluster data for UMAP visualization.
+    logger.info(f"Extracting all data from {db_path}")
 
-    Returns:
-        Dictionary with cluster embeddings and metadata
-    """
-    conn = sqlite3.connect(db_path)
+    user_genome_id = get_user_genome_id(db_path)
+    logger.info(f"User genome: {user_genome_id}")
 
-    # Check if cluster_embeddings table exists
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_embeddings'"
-    )
+    genes_data = extract_genes_data(db_path, user_genome_id)
+    logger.info(f"Extracted {len(genes_data)} genes")
 
-    if cursor.fetchone():
-        cursor = conn.execute("SELECT * FROM cluster_embeddings")
-        clusters = []
-        for row in cursor.fetchall():
-            cluster = {
-                "cluster_id": row[0],
-                "umap_x": row[1],
-                "umap_y": row[2],
-            }
-            clusters.append(cluster)
-        conn.close()
-        return {"clusters": clusters}
+    metadata = extract_metadata(db_path, user_genome_id, pangenome_id)
+    logger.info(f"Organism: {metadata['organism']}")
 
-    conn.close()
-    return {}
+    tree_data = extract_tree_data(db_path, user_genome_id)
+    logger.info(f"Tree: {tree_data.get('stats', {}).get('n_genomes', 0)} genomes")
 
+    reactions_data = extract_reactions_data(db_path, user_genome_id, genes_data)
+    logger.info(f"Reactions: {reactions_data.get('stats', {}).get('total_reactions', 0)}")
 
-# Helper functions
+    summary_stats = extract_summary_stats(db_path, user_genome_id)
 
-def count_terms(term_string):
-    """
-    Count semicolon-separated terms.
+    ref_genomes = extract_ref_genomes_data(db_path)
 
-    Args:
-        term_string: String like "K00001;K00002;K00003"
-
-    Returns:
-        Number of non-empty terms
-    """
-    if not term_string:
-        return 0
-    return len([t for t in term_string.split(';') if t.strip()])
-
-
-def get_user_genome_id(db_path):
-    """
-    Determine the user genome ID from the database.
-
-    The user genome is typically labeled as 'user_genome' or can be
-    identified from the genome table.
-
-    Args:
-        db_path: Path to SQLite database file
-
-    Returns:
-        User genome ID string
-    """
-    conn = sqlite3.connect(db_path)
-
-    # Try to find 'user_genome' first
-    cursor = conn.execute(
-        "SELECT genome_id FROM genome_features WHERE genome_id = 'user_genome' LIMIT 1"
-    )
-    row = cursor.fetchone()
-    if row:
-        conn.close()
-        return 'user_genome'
-
-    # Otherwise, look for genome with is_user_genome flag
-    cursor = conn.execute(
-        "SELECT genome_id FROM genome WHERE is_user_genome = 1 LIMIT 1"
-    )
-    row = cursor.fetchone()
-    if row:
-        conn.close()
-        return row[0]
-
-    # Fallback: get first genome from genome_features
-    cursor = conn.execute(
-        "SELECT DISTINCT genome_id FROM genome_features ORDER BY genome_id LIMIT 1"
-    )
-    row = cursor.fetchone()
-    conn.close()
-
-    if row:
-        return row[0]
-
-    raise ValueError("Could not determine user genome ID from database")
+    return {
+        "genes_data.json": genes_data,
+        "metadata.json": metadata,
+        "tree_data.json": tree_data,
+        "reactions_data.json": reactions_data,
+        "summary_stats.json": summary_stats,
+        "ref_genomes_data.json": ref_genomes,
+    }

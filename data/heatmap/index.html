@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Genome Heatmap Viewer</title>
+    <title>Datalake Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Oxygen:wght@300;400;700&display=swap" rel="stylesheet">
@@ -589,7 +589,7 @@
     <!-- Tab: Tracks -->
     <div class="tab-content active" id="tab-tracks">
         <div class="sidebar">
-            <div class="sidebar-header">Genome Heatmap Viewer</div>
+            <div class="sidebar-header">Datalake Dashboard</div>
             <!-- Search -->
             <div class="search-box">
                 <input type="text" id="gene-search" placeholder="Search genes (ID, function, KO)...">
@@ -770,7 +770,7 @@
         </div>
         <div class="main">
             <div class="cluster-toolbar" id="cluster-toolbar">
-                <span id="cluster-toolbar-info">UMAP projection of 4,617 genes</span>
+                <span id="cluster-toolbar-info">UMAP projection</span>
                 <span id="cluster-zoom-info" style="margin-left:8px; font-size:11px; color:#9D9389;"></span>
                 <button id="cluster-reset-zoom" style="margin-left:auto; padding:3px 10px; font-size:11px; border:1px solid var(--kb-base-lighter); border-radius:4px; background:var(--kb-white); color:var(--kb-base-dark); cursor:pointer; display:none;" onclick="resetClusterZoom()">Reset Zoom</button>
             </div>
@@ -1417,35 +1417,35 @@
           desc: '<strong>Has Official Gene Name</strong>' +
             '<span class="tt-label">What it shows:</span>Whether this gene has an official gene name (e.g., dnaA, tssB, lacZ) as opposed to being identified only by a locus tag.' +
             '<div class="tt-colors"><span class="tt-swatch" style="background:#6366f1"></span> <strong>Named</strong> = has official gene name &nbsp; <span class="tt-swatch" style="background:#f97316"></span> <strong>Unnamed</strong> = locus tag only</div>' +
-            '<span class="tt-label">Coverage:</span>3,955 of 4,617 genes (86%) have official names. Unnamed genes are less well-studied.' +
+            '<span class="tt-label">Coverage:</span>Most genes have official names. Unnamed genes are less well-studied.' +
             '<span class="tt-label">Source:</span>Gene names from Bakta annotation, which pulls from UniProt and RefSeq databases.' },
         { id: 'n_ec', name: '# EC Numbers', field: F.N_EC, type: 'sequential', enabled: false,
           desc: '<strong># Enzyme Commission (EC) Numbers</strong>' +
             '<span class="tt-label">What it shows:</span>How many EC numbers are assigned to this gene. EC numbers classify enzymes by the chemical reaction they catalyze (e.g., EC 1.1.1.1 = alcohol dehydrogenase).' +
             '<span class="tt-label">How to read it:</span>Light = 0 EC numbers (not an enzyme, or enzyme activity unknown). Dark = multiple EC numbers (multifunctional enzyme or enzyme with broad specificity). Most genes have 0 or 1.' +
-            '<span class="tt-label">Coverage:</span>1,876 genes (41%) have at least one EC number. Non-enzymatic proteins (transporters, regulators, structural) naturally have 0.' +
+            '<span class="tt-label">Coverage:</span>Typically ~40% of genes have at least one EC number. Non-enzymatic proteins (transporters, regulators, structural) naturally have 0.' +
             '<span class="tt-label">Source:</span>EC assignments from Bakta annotation pipeline.' },
         { id: 'cluster_size', name: 'Cluster Size', field: F.CLUSTER_SIZE, type: 'sequential', enabled: false,
           desc: '<strong>Pangenome Cluster Size</strong>' +
             '<span class="tt-label">What it shows:</span>Total number of gene members in this gene\'s pangenome cluster across all ${METADATA.n_ref_genomes} reference genomes. For multi-cluster genes, the largest cluster is shown.' +
-            '<span class="tt-label">How to read it:</span>Light = small cluster (1-5 members, rare gene family). Dark = large cluster (100+ members, expanded gene family). Ranges from 1 to 774 in this dataset.' +
+            '<span class="tt-label">How to read it:</span>Light = small cluster (1-5 members, rare gene family). Dark = large cluster (100+ members, expanded gene family).' +
             '<span class="tt-label">⚠️ Cluster Size vs Conservation:</span>These are DIFFERENT metrics! Conservation = fraction of genomes containing this gene (0-1 scale). Cluster Size = total number of gene copies across all genomes (can be > number of genomes if there are paralogs). Example: A gene in all ${METADATA.n_ref_genomes} genomes with 2 copies each has 100% conservation but cluster size = ${METADATA.n_ref_genomes * 2}.' +
-            '<span class="tt-label">Why huge clusters exist:</span>Some gene families (ABC transporters, transcriptional regulators) have many paralogs per genome. A cluster with 774 members across ${METADATA.n_ref_genomes} genomes averages ~${Math.floor(774 / METADATA.n_ref_genomes)} copies per genome. These large clusters can throw off the color scale.' +
+            '<span class="tt-label">Why huge clusters exist:</span>Some gene families (ABC transporters, transcriptional regulators) have many paralogs per genome. Large clusters can throw off the color scale.' +
             '<span class="tt-label">Biological insight:</span>Large clusters = expanded gene families with many paralogs. Small clusters = single-copy or rare genes. Compare with conservation to distinguish: high conservation + small cluster = single-copy essential gene; high conservation + large cluster = expanded gene family.' },
         { id: 'n_modules', name: 'KEGG Module Hits', field: F.N_MODULES, type: 'sequential', enabled: false,
           desc: '<strong>KEGG Module Participation</strong>' +
             '<span class="tt-label">What it shows:</span>How many KEGG metabolic modules this gene participates in. KEGG modules are functional units representing metabolic pathways, structural complexes, or signaling pathways.' +
             '<span class="tt-label">How to read it:</span>0 (light) = not in any active module. Higher (dark) = gene is part of multiple metabolic pathways (metabolic hub). Max is 9 in this genome.' +
-            '<span class="tt-label">Coverage:</span>252 genes (5.5%) participate in at least 1 of the 148 active KEGG modules. These are the metabolic backbone of the cell.' +
+            '<span class="tt-label">Coverage:</span>A small fraction of genes participate in active KEGG modules. These are the metabolic backbone of the cell.' +
             '<span class="tt-label">Biological insight:</span>Genes in many modules are central metabolic enzymes (glycolysis, TCA cycle, amino acid biosynthesis). They tend to be essential and highly conserved.' },
         { id: 'ec_map_cons', name: 'EC Mapped Consistency', field: F.EC_MAP_CONS, type: 'consistency', enabled: false,
           desc: '<strong>EC Mapped Consistency</strong>' +
             '<span class="tt-label">What it shows:</span>Consistency of this gene\'s EC number assignment compared to other genes in the same pangenome cluster, using EC numbers derived from GO and KEGG mappings (not direct EC annotation).' +
-            '<span class="tt-label">How it differs from EC Consistency:</span>Regular EC Consistency uses directly annotated EC numbers. EC Mapped Consistency uses EC numbers inferred through GO term cross-references (oio:hasDbXref) and KEGG KO-to-EC mappings. These two often disagree (1,742 genes differ).' +
+            '<span class="tt-label">How it differs from EC Consistency:</span>Regular EC Consistency uses directly annotated EC numbers. EC Mapped Consistency uses EC numbers inferred through GO term cross-references (oio:hasDbXref) and KEGG KO-to-EC mappings. These two often disagree.' +
             '<span class="tt-label">How to interpret:</span>When EC Consistency is low but EC Mapped is high (or vice versa), it means the mapping pathway matters. Orange = mapped ECs agree across cluster. Blue = disagree. Gray = no EC mapping or no cluster.' },
         { id: 'prot_len', name: 'Protein Length', field: F.PROT_LEN, type: 'sequential', enabled: false,
           desc: '<strong>Protein Length (amino acids)</strong>' +
-            '<span class="tt-label">What it shows:</span>Length of the predicted protein product in amino acids. Ranges from 29 to 2,358 aa in this genome (mean 311 aa).' +
+            '<span class="tt-label">What it shows:</span>Length of the predicted protein product in amino acids.' +
             '<span class="tt-label">How to read it:</span>Light = short protein (<100 aa). Dark = long protein (>500 aa). Very short proteins (<50 aa) may be fragments, small regulatory peptides, or annotation artifacts.' +
             '<span class="tt-label">Biological insight:</span>Protein length loosely correlates with complexity. Multi-domain proteins are longer. Transporters and synthases tend to be large. Regulatory proteins and toxins can be very small.' },
         { id: 'neighborhood', name: 'Neighborhood Conservation*', field: -1, type: 'placeholder', enabled: false,
@@ -1882,26 +1882,7 @@
         const naCount = genes.filter(g => g[F.AVG_CONS] < 0).length;
         const lowCons = genes.filter(g => g[F.AVG_CONS] >= 0 && g[F.AVG_CONS] < 0.5).length;
 
-        // Missing Core: Count how many core pangenome clusters (>95% conservation) this genome lacks
-        // Core clusters are those with conservation_frac > 0.95
-        // A cluster is "missing" if no genes in this genome belong to it
-        const presentClusters = new Set();
-        genes.forEach(g => {
-            if (g[F.CLUSTER_SIZE] > 0) {
-                // Gene belongs to a cluster - mark it as present
-                // Note: We use cluster_size > 0 as proxy for having a cluster
-                // Ideally we'd have cluster_id, but we track by conservation_frac
-                const cons = g[F.CONS_FRAC];
-                if (cons != null && cons > 0.95) {
-                    presentClusters.add(Math.floor(cons * 1000)); // Approximate cluster ID
-                }
-            }
-        });
-        // Estimate missing core: If we have ~3000 genes and ~2500 clusters,
-        // and pangenome has ~4000 clusters, missing core ≈ total_pangenome_core - our_core
-        // This is approximate - exact calculation needs full pangenome cluster data
-        const estimatedPangenomeCore = Math.floor(total * 1.3); // Rough estimate
-        const missingCore = Math.max(0, estimatedPangenomeCore - core);
+        const nRefGenomes = METADATA?.n_ref_genomes || '?';
 
         document.getElementById('kpi-bar').innerHTML = `
             <span class="kpi-stat" style="font-weight:700; font-style:italic;">${METADATA?.organism || 'Unknown Organism'}</span>
@@ -1910,7 +1891,7 @@
             <span class="kpi-stat"><span class="kpi-value">${core}</span><span class="kpi-label">core</span></span>
             <span class="kpi-stat"><span class="kpi-value">${accessory}</span><span class="kpi-label">accessory</span></span>
             <span class="kpi-stat"><span class="kpi-value">${unknown}</span><span class="kpi-label">unknown</span></span>
-            <span class="kpi-stat" style="background:#c1121f22; border-left:3px solid #c1121f;"><span class="kpi-value" style="color:#c1121f;">${missingCore}</span><span class="kpi-label">missing core</span></span>
+            <span class="kpi-stat"><span class="kpi-value">${nRefGenomes}</span><span class="kpi-label">ref genomes</span></span>
             <span class="kpi-stat"><span class="kpi-value">${meanCons}</span><span class="kpi-label">avg consistency</span></span>
             <span class="kpi-stat"><span class="kpi-value">${lowCons}</span><span class="kpi-label">low consistency</span></span>
         `;

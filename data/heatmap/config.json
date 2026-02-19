@@ -1,5 +1,5 @@
 {
-  "title": "Genome Heatmap Viewer",
+  "title": "Datalake Dashboard",
   "data_files": {
     "metadata": "metadata.json",
     "summary": "summary_stats.json",
