@@ -1,16 +1,16 @@
 {
   "title": "Datalake Dashboard",
   "data_files": {
-    "metadata": "data/metadata.json",
-    "summary": "data/summary_stats.json",
-    "genes": "data/genes_data.json",
-    "tree": "data/tree_data.json",
-    "cluster": "data/cluster_data.json",
-    "reactions": "data/reactions_data.json",
-    "ref_genomes": "data/ref_genomes_data.json",
+    "metadata": "metadata.json",
+    "summary": "summary_stats.json",
+    "genes": "genes_data.json",
+    "tree": "tree_data.json",
+    "cluster": "cluster_data.json",
+    "reactions": "reactions_data.json",
+    "ref_genomes": "ref_genomes_data.json",
     "metabolic_maps": {
-      "full": { "file": "data/metabolic_map_full.json", "name": "Global Metabolism" },
-      "core": { "file": "data/metabolic_map_core.json", "name": "Core Metabolism" }
+      "full": { "file": "metabolic_map_full.json", "name": "Global Metabolism" },
+      "core": { "file": "metabolic_map_core.json", "name": "Core Metabolism" }
     }
   },
   "fields": {
