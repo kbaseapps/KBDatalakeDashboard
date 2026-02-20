@@ -104,8 +104,10 @@ function transformTableScannerToGenesData(rows) {
             row.min_class || '',                      // 33: min_class
             row.psortb_new || 0,                      // 34: psortb_new
             row.essentiality || 0,                    // 35: essentiality
-            row.n_phenotypes || 0,                    // 36: n_phenotypes
-            row.n_fitness || 0                        // 37: n_fitness
+            row.gene_name || '',                      // 36: gene_name
+            row.n_phenotypes || 0,                    // 37: n_phenotypes
+            row.n_fitness || 0,                       // 38: n_fitness
+            row.fitness_avg ?? -1                     // 39: fitness_avg
         ];
     });
 }
