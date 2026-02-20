@@ -18,6 +18,7 @@ Produces JSON files matching the format expected by the genome-heatmap-viewer:
 
 import json
 import logging
+import os
 import re
 import sqlite3
 from collections import defaultdict
@@ -104,6 +105,24 @@ def is_hypothetical(func):
     if fl.startswith("fig") and fl.endswith("hypothetical protein"):
         return True
     return False
+
+
+def jaccard_similarity(vec_a, vec_b):
+    """Compute Jaccard similarity between two binary vectors."""
+    intersection = sum(1 for a, b in zip(vec_a, vec_b) if a == 1 and b == 1)
+    union = sum(1 for a, b in zip(vec_a, vec_b) if a == 1 or b == 1)
+    return intersection / union if union > 0 else 0.0
+
+
+def build_user_pheno_vector(conn, user_genome_id, phenotype_ids):
+    """Build P/N vector for user genome matching reference phenotype order."""
+    pheno_map = {}
+    for row in conn.execute(
+        "SELECT phenotype_id, class FROM genome_phenotype WHERE genome_id = ?",
+        (user_genome_id,)
+    ):
+        pheno_map[row["phenotype_id"]] = 1 if row["class"] == "P" else 0
+    return [pheno_map.get(pid, 0) for pid in phenotype_ids]
 
 
 def compute_consistency(user_annotation, cluster_annotations):
@@ -1194,10 +1213,46 @@ def extract_summary_stats(db_path, user_genome_id):
                 "no_gap_pct": round(row["no_gap_count"] / row["total"], 4) if row["total"] else 0,
                 "accuracy": round(row["accuracy"], 4) if row["accuracy"] else None
             })
-        has_accuracy = any(g["accuracy"] is not None for g in phenotype_landscape["genomes"])
-        phenotype_landscape["has_accuracy"] = has_accuracy
+        # --- Reference phenotype accuracy (Jaccard matching) ---
+        ref_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "heatmap", "reference_phenotypes.json")
+        if os.path.exists(ref_path):
+            logger.info("  Loading reference phenotypes for Jaccard matching...")
+            with open(ref_path) as f:
+                ref_data = json.load(f)
+
+            user_vector = build_user_pheno_vector(conn, user_genome_id, ref_data["phenotype_ids"])
+
+            best_match = None
+            best_similarity = -1
+            for ref_genome in ref_data["genomes"]:
+                sim = jaccard_similarity(user_vector, ref_genome["vector"])
+                if sim > best_similarity:
+                    best_similarity = sim
+                    best_match = ref_genome
+
+            if best_match:
+                for g in phenotype_landscape["genomes"]:
+                    if g["id"] == user_genome_id:
+                        g["accuracy"] = best_match["accuracy"]
+                        g["closest_experimental"] = best_match["id"]
+                        g["jaccard_similarity"] = round(best_similarity, 4)
+                logger.info(f"  Closest experimental: {best_match['id']} "
+                            f"(Jaccard={best_similarity:.4f}, accuracy={best_match['accuracy']})")
+
+            phenotype_landscape["reference_accuracies"] = [
+                {"id": g["id"], "accuracy": g["accuracy"]}
+                for g in ref_data["genomes"]
+                if g["accuracy"] is not None
+            ]
+            phenotype_landscape["has_accuracy"] = True
+            logger.info(f"  {len(phenotype_landscape['reference_accuracies'])} reference genomes with accuracy")
+        else:
+            has_accuracy = any(g["accuracy"] is not None for g in phenotype_landscape["genomes"])
+            phenotype_landscape["has_accuracy"] = has_accuracy
+            logger.info(f"  No reference_phenotypes.json found, using DB accuracy (available: {has_accuracy})")
+
         summary["phenotype_landscape"] = phenotype_landscape
-        logger.info(f"  Phenotype landscape: {len(phenotype_landscape['genomes'])} genomes, accuracy={has_accuracy}")
+        logger.info(f"  Phenotype landscape: {len(phenotype_landscape['genomes'])} genomes")
     except sqlite3.OperationalError:
         summary["phenotype_landscape"] = None
         logger.info("  (genome_phenotype table not found for landscape)")

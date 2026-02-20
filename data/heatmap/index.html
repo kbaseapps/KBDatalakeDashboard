@@ -3715,14 +3715,10 @@
         const select = document.getElementById('dist-track-select');
         select.innerHTML = '<option value="">-- Choose a track --</option>';
 
-        // STOWED: Phenotype Prediction Landscape - needs experimental accuracy data in genome_phenotype
-        // (observed_objective column). Revisit when Chris's pipeline populates this data.
-        // See renderPhenotypeLandscape() function below - ready to activate.
-        /*
-        if (summaryData && summaryData.phenotype_landscape) {
+        if (summaryData && summaryData.phenotype_landscape && summaryData.phenotype_landscape.has_accuracy) {
             const opt = document.createElement('option');
             opt.value = '__phenotype_landscape__';
-            opt.textContent = '🧬 Phenotype Prediction Landscape';
+            opt.textContent = 'Phenotype Prediction Landscape';
             opt.style.fontWeight = 'bold';
             select.appendChild(opt);
 
@@ -3731,7 +3727,6 @@
             sep.textContent = '───────────────────';
             select.appendChild(sep);
         }
-        */
 
         TRACKS.forEach(track => {
             const option = document.createElement('option');
@@ -3757,11 +3752,10 @@
 
         const container = document.getElementById('distributions-container');
 
-        // STOWED: Phenotype Prediction Landscape (needs experimental accuracy data)
-        // if (trackId === '__phenotype_landscape__') {
-        //     renderPhenotypeLandscape(container);
-        //     return;
-        // }
+        if (trackId === '__phenotype_landscape__') {
+            renderPhenotypeLandscape(container);
+            return;
+        }
 
         const track = TRACKS.find(t => t.id === trackId);
         if (!track) return;
@@ -4099,11 +4093,12 @@
         gapsSvg += `<text x="${margin.left - 40}" y="${margin.top + h/2}" text-anchor="middle" font-size="11" fill="var(--kb-base)" transform="rotate(-90, ${margin.left - 40}, ${margin.top + h/2})">Avg Gap Count</text>`;
         gapsSvg += `<text x="${margin.left + w/2}" y="${chartH - 5}" text-anchor="middle" font-size="11" fill="var(--kb-base)">Genomes (sorted by avg gap count)</text>`;
 
-        // Chart C: Accuracy Distribution (only if has_accuracy)
+        // Chart C: Accuracy Distribution from reference experimental genomes
         let accuracySvg = '';
         let accuracySection = '';
-        if (hasAccuracy) {
-            const accValues = genomes.filter(g => g.accuracy !== null).map(g => g.accuracy);
+        if (hasAccuracy && landscape.reference_accuracies) {
+            const refAccuracies = landscape.reference_accuracies;
+            const accValues = refAccuracies.filter(g => g.accuracy !== null).map(g => g.accuracy);
             const nBins = 10;
             const accBins = Array(nBins).fill(0);
             accValues.forEach(v => {
@@ -4113,18 +4108,24 @@
             const maxBin = Math.max(...accBins);
             const accBarW = w / nBins;
 
+            // X-axis labels
+            for (let i = 0; i <= nBins; i++) {
+                const x = margin.left + i * accBarW;
+                accuracySvg += `<text x="${x}" y="${margin.top + h + 15}" text-anchor="middle" font-size="9" fill="var(--kb-base-light)">${(i/nBins*100).toFixed(0)}%</text>`;
+            }
+
             accBins.forEach((count, i) => {
                 const barH = maxBin > 0 ? (count / maxBin) * h : 0;
                 const x = margin.left + i * accBarW;
                 accuracySvg += `<rect x="${x}" y="${margin.top + h - barH}" width="${accBarW * 0.9}" height="${barH}" fill="#8b5cf6" opacity="0.7">
-                    <title>${(i/nBins).toFixed(1)}-${((i+1)/nBins).toFixed(1)}: ${count} genomes</title></rect>`;
+                    <title>${(i/nBins*100).toFixed(0)}%-${((i+1)/nBins*100).toFixed(0)}%: ${count} genomes</title></rect>`;
             });
 
-            // User genome marker
+            // User genome marker (assigned accuracy from closest experimental match)
             if (userGenome && userGenome.accuracy !== null) {
                 const userX = margin.left + userGenome.accuracy * w;
-                accuracySvg += `<line x1="${userX}" y1="${margin.top}" x2="${userX}" y2="${margin.top + h}" stroke="#000" stroke-width="2" stroke-dasharray="4,2"/>`;
-                accuracySvg += `<text x="${userX}" y="${margin.top - 5}" text-anchor="middle" font-size="10" font-weight="bold" fill="#000">Your genome</text>`;
+                accuracySvg += `<line x1="${userX}" y1="${margin.top}" x2="${userX}" y2="${margin.top + h}" stroke="#e11d48" stroke-width="2.5" stroke-dasharray="4,2"/>`;
+                accuracySvg += `<text x="${userX}" y="${margin.top - 5}" text-anchor="middle" font-size="10" font-weight="bold" fill="#e11d48">Your genome (${(userGenome.accuracy * 100).toFixed(1)}%)</text>`;
             }
 
             for (let i = 0; i <= 4; i++) {
@@ -4138,11 +4139,22 @@
             accuracySvg += `<text x="${margin.left - 40}" y="${margin.top + h/2}" text-anchor="middle" font-size="11" fill="var(--kb-base)" transform="rotate(-90, ${margin.left - 40}, ${margin.top + h/2})">Genome Count</text>`;
             accuracySvg += `<text x="${margin.left + w/2}" y="${chartH - 5}" text-anchor="middle" font-size="11" fill="var(--kb-base)">Prediction Accuracy</text>`;
 
+            // User accuracy info card
+            const userAccCard = userGenome && userGenome.accuracy !== null ? `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-weight: 600; color: #991b1b; margin-bottom: 4px;">Estimated Accuracy: ${(userGenome.accuracy * 100).toFixed(1)}%</div>
+                    <div style="font-size: 11px; color: #7f1d1d;">
+                        Based on closest experimental genome: <strong>${userGenome.closest_experimental || 'unknown'}</strong>
+                        (Jaccard similarity: ${userGenome.jaccard_similarity ? (userGenome.jaccard_similarity * 100).toFixed(1) + '%' : 'N/A'})
+                    </div>
+                </div>` : '';
+
             accuracySection = `
                 <div style="margin-top: 24px;">
                     <h3 style="font-size: 14px; font-weight: 600; color: var(--kb-base-dark); margin-bottom: 12px;">Prediction Accuracy Distribution</h3>
+                    ${userAccCard}
                     <p style="font-size: 11px; color: var(--kb-base-light); margin-bottom: 8px;">
-                        Distribution of phenotype prediction accuracy across genomes. Your genome is marked with a vertical line.
+                        Distribution of phenotype prediction accuracy across ${refAccuracies.length} experimental genomes. Your genome's estimated accuracy is marked with a vertical line.
                     </p>
                     <svg width="${chartW}" height="${chartH}" style="max-width: 100%;">${accuracySvg}</svg>
                 </div>
@@ -4173,6 +4185,11 @@
                         <div class="dist-stat-label">Your Avg Gaps</div>
                         <div class="dist-stat-value">${userGenome ? userGenome.avg_gaps : 'N/A'}</div>
                     </div>
+                    ${hasAccuracy && userGenome && userGenome.accuracy !== null ? `
+                    <div class="dist-stat-card" style="border-left-color: #8b5cf6;">
+                        <div class="dist-stat-label">Est. Accuracy</div>
+                        <div class="dist-stat-value">${(userGenome.accuracy * 100).toFixed(1)}%</div>
+                    </div>` : ''}
                 </div>
 
                 <div style="margin-top: 16px;">
