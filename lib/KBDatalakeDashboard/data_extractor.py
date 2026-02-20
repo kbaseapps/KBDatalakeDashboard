@@ -8,7 +8,7 @@ Supports the new DB schema (2026+) with:
 - genome_reaction, genome_gene_reaction_essentially_test, gene_phenotype tables
 
 Produces JSON files matching the format expected by the genome-heatmap-viewer:
-- genes_data.json (38-field arrays)
+- genes_data.json (42-field arrays)
 - metadata.json
 - tree_data.json (linkage matrix + genome metadata)
 - reactions_data.json
@@ -283,7 +283,7 @@ def get_user_genome_id(db_path):
 
 
 def extract_genes_data(db_path, user_genome_id):
-    """Extract gene data as 40-field arrays for genes_data.json.
+    """Extract gene data as 42-field arrays for genes_data.json.
 
     Field indices match config.json:
     [0]  ID           [1]  FID          [2]  LENGTH       [3]  START
@@ -296,6 +296,7 @@ def extract_genes_data(db_path, user_genome_id):
     [28] PROT_LEN     [29] REACTIONS    [30] RICH_FLUX     [31] RICH_CLASS
     [32] MIN_FLUX     [33] MIN_CLASS    [34] PSORTB_NEW    [35] ESSENTIALITY
     [36] GENE_NAME    [37] N_PHENOTYPES [38] N_FITNESS     [39] FITNESS_AVG
+    [40] N_FITNESS_AGREE  [41] FITNESS_AGREE_PCT
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -417,9 +418,11 @@ def extract_genes_data(db_path, user_genome_id):
     gene_fitness_counts = defaultdict(int)
     gene_fitness_avg_sum = defaultdict(float)
     gene_fitness_avg_count = defaultdict(int)
+    gene_fitness_agree = defaultdict(int)
+    gene_fitness_scored = defaultdict(int)
     try:
         for row in conn.execute("""
-            SELECT gene_id, phenotype_id, fitness_match, fitness_avg
+            SELECT gene_id, phenotype_id, fitness_match, fitness_avg, essentiality_fraction
             FROM gene_phenotype
             WHERE genome_id = ?
         """, (user_genome_id,)):
@@ -429,6 +432,12 @@ def extract_genes_data(db_path, user_genome_id):
                 if row["fitness_avg"] is not None:
                     gene_fitness_avg_sum[row["gene_id"]] += row["fitness_avg"]
                     gene_fitness_avg_count[row["gene_id"]] += 1
+                # Model-fitness agreement
+                gene_fitness_scored[row["gene_id"]] += 1
+                model_essential = (row["essentiality_fraction"] or 0) > 0
+                fitness_harmful = (row["fitness_avg"] or 0) < 0
+                if model_essential == fitness_harmful:
+                    gene_fitness_agree[row["gene_id"]] += 1
         logger.info(f"  {len(gene_phenotype_counts)} genes with phenotype data")
     except sqlite3.OperationalError:
         logger.info("  (gene_phenotype table not found)")
@@ -647,7 +656,12 @@ def extract_genes_data(db_path, user_genome_id):
         else:
             fitness_avg = -1
 
-        # ── Build 40-field gene array ───────────────────────────────────
+        # Model-fitness agreement
+        n_agree = gene_fitness_agree.get(fid, 0)
+        n_scored = gene_fitness_scored.get(fid, 0)
+        agree_pct = round(n_agree / n_scored, 4) if n_scored > 0 else -1
+
+        # ── Build 42-field gene array ───────────────────────────────────
         gene = [
             order_idx,      # [0]  ID
             fid,            # [1]  FID
@@ -689,6 +703,8 @@ def extract_genes_data(db_path, user_genome_id):
             n_phenotypes,   # [37] N_PHENOTYPES
             n_fitness,      # [38] N_FITNESS
             fitness_avg,    # [39] FITNESS_AVG
+            n_agree,        # [40] N_FITNESS_AGREE
+            agree_pct,      # [41] FITNESS_AGREE_PCT
         ]
         genes.append(gene)
 
@@ -1153,6 +1169,38 @@ def extract_summary_stats(db_path, user_genome_id):
         }
     except sqlite3.OperationalError:
         summary["reactions"] = None
+
+    # ── Phenotype Prediction Landscape ───────────────────────────────
+    try:
+        phenotype_landscape = {"genomes": [], "user_genome_id": user_genome_id}
+        for row in conn.execute("""
+            SELECT genome_id,
+                   COUNT(CASE WHEN class = 'P' THEN 1 END) as positive,
+                   COUNT(CASE WHEN class = 'N' THEN 1 END) as negative,
+                   COUNT(*) as total,
+                   AVG(gap_count) as avg_gaps,
+                   SUM(CASE WHEN gap_count = 0 THEN 1 ELSE 0 END) as no_gap_count,
+                   AVG(CASE WHEN observed_objective > 0 THEN 1.0 ELSE NULL END) as accuracy
+            FROM genome_phenotype
+            GROUP BY genome_id
+            ORDER BY genome_id
+        """):
+            phenotype_landscape["genomes"].append({
+                "id": row["genome_id"],
+                "positive": row["positive"],
+                "negative": row["negative"],
+                "total": row["total"],
+                "avg_gaps": round(row["avg_gaps"], 2) if row["avg_gaps"] else 0,
+                "no_gap_pct": round(row["no_gap_count"] / row["total"], 4) if row["total"] else 0,
+                "accuracy": round(row["accuracy"], 4) if row["accuracy"] else None
+            })
+        has_accuracy = any(g["accuracy"] is not None for g in phenotype_landscape["genomes"])
+        phenotype_landscape["has_accuracy"] = has_accuracy
+        summary["phenotype_landscape"] = phenotype_landscape
+        logger.info(f"  Phenotype landscape: {len(phenotype_landscape['genomes'])} genomes, accuracy={has_accuracy}")
+    except sqlite3.OperationalError:
+        summary["phenotype_landscape"] = None
+        logger.info("  (genome_phenotype table not found for landscape)")
 
     conn.close()
     return summary

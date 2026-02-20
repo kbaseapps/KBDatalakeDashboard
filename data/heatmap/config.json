@@ -25,7 +25,8 @@
     "REACTIONS": 29, "RICH_FLUX": 30, "RICH_CLASS": 31, "MIN_FLUX": 32,
     "MIN_CLASS": 33, "PSORTB_NEW": 34, "ESSENTIALITY": 35,
     "GENE_NAME": 36,
-    "N_PHENOTYPES": 37, "N_FITNESS": 38, "FITNESS_AVG": 39
+    "N_PHENOTYPES": 37, "N_FITNESS": 38, "FITNESS_AVG": 39,
+    "N_FITNESS_AGREE": 40, "FITNESS_AGREE_PCT": 41
   },
   "categories": {
     "localization": ["Cytoplasmic", "CytoMembrane", "Periplasmic", "OuterMembrane", "Extracellular", "Unknown"],
@@ -59,7 +60,9 @@
     { "id": "essentiality", "name": "Gene Essentiality", "field": "ESSENTIALITY", "type": "sequential", "enabled": false },
     { "id": "n_phenotypes", "name": "# Phenotypes", "field": "N_PHENOTYPES", "type": "sequential", "enabled": false },
     { "id": "n_fitness", "name": "# Fitness Scores", "field": "N_FITNESS", "type": "sequential", "enabled": false },
-    { "id": "fitness_avg", "name": "Avg Fitness Score", "field": "FITNESS_AVG", "type": "diverging", "enabled": false }
+    { "id": "fitness_avg", "name": "Avg Fitness Score", "field": "FITNESS_AVG", "type": "diverging", "enabled": false },
+    { "id": "n_fitness_agree", "name": "# Model-Fitness Agreements", "field": "N_FITNESS_AGREE", "type": "sequential", "enabled": false },
+    { "id": "fitness_agree_pct", "name": "Model-Fitness Agreement %", "field": "FITNESS_AGREE_PCT", "type": "consistency", "enabled": false }
   ],
   "placeholder_tracks": [
     { "id": "neighborhood", "name": "Neighborhood Conservation*", "pending": true },

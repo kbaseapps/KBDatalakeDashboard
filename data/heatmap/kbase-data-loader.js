@@ -107,7 +107,9 @@ function transformTableScannerToGenesData(rows) {
             row.gene_name || '',                      // 36: gene_name
             row.n_phenotypes || 0,                    // 37: n_phenotypes
             row.n_fitness || 0,                       // 38: n_fitness
-            row.fitness_avg ?? -1                     // 39: fitness_avg
+            row.fitness_avg ?? -1,                    // 39: fitness_avg
+            row.n_fitness_agree || 0,                 // 40: n_fitness_agree
+            row.fitness_agree_pct ?? -1               // 41: fitness_agree_pct
         ];
     });
 }

@@ -612,7 +612,9 @@
         <button class="tab-btn active" data-tab="tracks" onclick="switchTab('tracks')">Tracks</button>
         <button class="tab-btn" data-tab="distributions" onclick="switchTab('distributions')">Distributions</button>
         <button class="tab-btn" data-tab="tree" onclick="switchTab('tree')">Tree</button>
+        <!-- Cluster tab hidden per Chris's feedback - clusters lack meaningful interpretation
         <button class="tab-btn" data-tab="cluster" onclick="switchTab('cluster')">Cluster</button>
+        -->
         <button class="tab-btn" data-tab="metabolic" onclick="switchTab('metabolic')">Metabolic Map</button>
         <button class="tab-btn" data-tab="help" onclick="switchTab('help')" style="margin-left: auto;">Help</button>
     </div>
@@ -741,76 +743,11 @@
         <div class="tree-tooltip" id="tree-tooltip"></div>
     </div>
 
-    <!-- Tab: Cluster -->
+    <!-- Tab: Cluster (hidden per Chris's feedback - clusters lack meaningful interpretation)
     <div class="tab-content" id="tab-cluster">
-        <div class="sidebar">
-            <div class="sidebar-header">Gene Clusters</div>
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">
-                    <span>Embedding</span>
-                    <span class="toggle-icon">&#9660;</span>
-                </div>
-                <div style="padding: 6px 12px;">
-                    <select class="cluster-select" id="cluster-embedding" onchange="changeClusterEmbedding()">
-                        <option value="features">Gene Features</option>
-                        <option value="presence">Presence/Absence</option>
-                    </select>
-                    <div style="font-size: 10px; color: var(--kb-base-light); margin-top: 4px;" id="cluster-embed-desc">
-                        UMAP of conservation, consistency scores, annotation counts, protein length
-                    </div>
-                </div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">
-                    <span>Color By</span>
-                    <span class="toggle-icon">&#9660;</span>
-                </div>
-                <div style="padding: 6px 12px;">
-                    <select class="cluster-select" id="cluster-color-by" onchange="changeClusterColor()">
-                        <option value="pan_category">Core/Accessory</option>
-                        <option value="conservation">Conservation</option>
-                        <option value="avg_cons">Avg Consistency</option>
-                        <option value="localization">Localization</option>
-                        <option value="n_ko"># KEGG Terms</option>
-                        <option value="n_modules">Module Hits</option>
-                        <option value="cluster_size">Cluster Size</option>
-                        <option value="specificity">Specificity</option>
-                    </select>
-                </div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">
-                    <span>Search</span>
-                    <span class="toggle-icon">&#9660;</span>
-                </div>
-                <div class="search-box">
-                    <input type="text" id="cluster-search" placeholder="Search genes...">
-                    <div class="search-info" id="cluster-search-info"></div>
-                </div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">
-                    <span>Info</span>
-                    <span class="toggle-icon">&#9660;</span>
-                </div>
-                <div style="padding: 8px 12px; font-size: 11px; color: var(--kb-base); line-height: 1.6;" id="cluster-info">
-                    Loading cluster data...
-                </div>
-            </div>
-        </div>
-        <div class="main">
-            <div class="cluster-toolbar" id="cluster-toolbar">
-                <span id="cluster-toolbar-info">UMAP projection</span>
-                <span id="cluster-zoom-info" style="margin-left:8px; font-size:11px; color:#9D9389;"></span>
-                <button id="cluster-reset-zoom" style="margin-left:auto; padding:3px 10px; font-size:11px; border:1px solid var(--kb-base-lighter); border-radius:4px; background:var(--kb-white); color:var(--kb-base-dark); cursor:pointer; display:none;" onclick="resetClusterZoom()">Reset Zoom</button>
-            </div>
-            <div class="cluster-container">
-                <canvas id="cluster-canvas"></canvas>
-                <div class="tooltip" id="cluster-tooltip"></div>
-            </div>
-            <div class="cluster-legend" id="cluster-legend"></div>
-        </div>
+        ...cluster content preserved but hidden...
     </div>
+    -->
 
     <!-- Tab: Distributions -->
     <div class="tab-content" id="tab-distributions">
@@ -1348,7 +1285,8 @@
         REACTIONS:29, RICH_FLUX:30, RICH_CLASS:31, MIN_FLUX:32,
         MIN_CLASS:33, PSORTB_NEW:34, ESSENTIALITY:35,
         GENE_NAME:36,
-        N_PHENOTYPES:37, N_FITNESS:38, FITNESS_AVG:39
+        N_PHENOTYPES:37, N_FITNESS:38, FITNESS_AVG:39,
+        N_FITNESS_AGREE:40, FITNESS_AGREE_PCT:41
     };
 
     let LOC_NAMES = ['Cytoplasmic', 'CytoMembrane', 'Periplasmic', 'OuterMembrane', 'Extracellular', 'Unknown'];
@@ -1538,8 +1476,19 @@
             '<span class="tt-label">How to read it:</span>Light (0) = no experimental validation. Dark (high count) = gene validated across many conditions.' +
             '<span class="tt-label">🔬 Data source:</span>Propagated from Adam Deutschbauer\'s RB-TnSeq/SEEK database for ADP1. This is experimental data mapped to this genome.' +
             '<span class="tt-label">Biological insight:</span>High fitness counts indicate experimentally verified importance. Genes with high phenotype predictions but zero fitness scores may need experimental validation.' },
+        { id: 'n_fitness_agree', name: '# Model-Fitness Agreements', field: F.N_FITNESS_AGREE, type: 'sequential', enabled: false,
+          desc: '<strong># Model-Fitness Agreements</strong>' +
+            '<span class="tt-label">What it shows:</span>Number of phenotype conditions where the FBA metabolic model prediction and experimental fitness data agree on gene essentiality.' +
+            '<span class="tt-label">How it\'s computed:</span>For each condition with fitness data: Model says essential if essentiality_fraction > 0 (gene\'s reactions are needed for growth). Fitness says harmful if fitness_avg < 0 (knockout reduces fitness). Agreement = both essential OR both not essential.' +
+            '<span class="tt-label">How to read it:</span>Light (0) = no agreements or no scored conditions. Dark (high) = gene consistently validated across many conditions.' +
+            '<span class="tt-label">Biological insight:</span>High agreement count indicates reliable model predictions for this gene. Low agreement despite many fitness scores suggests the model may be wrong about this gene\'s metabolic role.' },
+        { id: 'fitness_agree_pct', name: 'Model-Fitness Agreement %', field: F.FITNESS_AGREE_PCT, type: 'consistency', enabled: false,
+          desc: '<strong>Model-Fitness Agreement Percentage</strong>' +
+            '<span class="tt-label">What it shows:</span>Fraction of scored phenotype conditions where the FBA model prediction and experimental fitness data agree on this gene\'s essentiality.' +
+            '<span class="tt-label">How to read it:</span>Orange (1.0) = model and fitness always agree. Blue (0.0) = model and fitness always disagree. Gray = no scored conditions available.' +
+            '<span class="tt-label">Biological insight:</span>Low agreement (blue) genes are targets for model improvement - the metabolic model may need better gap-filling or pathway assignments. High agreement (orange) confirms the model correctly captures this gene\'s metabolic role.' },
 
-        // NEW TRACKS: Essentiality, Missing Core, Improbability
+        // COMPUTED TRACKS: Essentiality, Missing Core, Improbability
         { id: 'essentiality', name: 'Essential Gene', field: -1, type: 'categorical', enabled: false,
           getValue: (gene) => {
               const geneId = gene[CONFIG.fields.FID];
@@ -1811,7 +1760,8 @@
             if (!treeLoaded) loadTreeData();
             if (!summaryLoaded) loadSummaryData();
         }
-        if (tabId === 'cluster' && !clusterLoaded) loadClusterData();
+        // Cluster tab hidden per Chris's feedback
+        // if (tabId === 'cluster' && !clusterLoaded) loadClusterData();
         if (tabId === 'distributions' && !distributionsLoaded) initDistributions();
         if (tabId === 'metabolic') {
             if (!metabolicLoaded) loadMetabolicData();
@@ -1897,9 +1847,9 @@
             });
             html += `</select>`;
             html += `<span class="nav-sep">|</span>`;
-            html += `<a href="${nav.tables_url}">Tables</a>`;
+            html += `<a href="${nav.tables_url}" target="_blank" title="Open Tables viewer in new window">Tables ↗</a>`;
         } else if (nav.tables_url) {
-            html += `<a href="${nav.tables_url}">Tables</a>`;
+            html += `<a href="${nav.tables_url}" target="_blank" title="Open Tables viewer in new window">Tables ↗</a>`;
         }
         el.innerHTML = html;
         if (html) el.style.display = 'flex';
@@ -3765,6 +3715,20 @@
         const select = document.getElementById('dist-track-select');
         select.innerHTML = '<option value="">-- Choose a track --</option>';
 
+        // Add special phenotype landscape option if data available
+        if (summaryData && summaryData.phenotype_landscape) {
+            const opt = document.createElement('option');
+            opt.value = '__phenotype_landscape__';
+            opt.textContent = '🧬 Phenotype Prediction Landscape';
+            opt.style.fontWeight = 'bold';
+            select.appendChild(opt);
+
+            const sep = document.createElement('option');
+            sep.disabled = true;
+            sep.textContent = '───────────────────';
+            select.appendChild(sep);
+        }
+
         TRACKS.forEach(track => {
             const option = document.createElement('option');
             option.value = track.id;
@@ -3787,10 +3751,16 @@
             return;
         }
 
+        const container = document.getElementById('distributions-container');
+
+        // Special: Phenotype Prediction Landscape
+        if (trackId === '__phenotype_landscape__') {
+            renderPhenotypeLandscape(container);
+            return;
+        }
+
         const track = TRACKS.find(t => t.id === trackId);
         if (!track) return;
-
-        const container = document.getElementById('distributions-container');
 
         if (track.type === 'categorical') {
             renderCategoricalDistribution(track, container);
@@ -4032,6 +4002,205 @@
         });
 
         renderHistogram(track, values, null, container);
+    }
+
+    function renderPhenotypeLandscape(container) {
+        const landscape = summaryData && summaryData.phenotype_landscape;
+        if (!landscape || !landscape.genomes || landscape.genomes.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:var(--kb-base-light); margin-top:100px;">
+                <p style="font-size:16px;">No phenotype prediction data available</p>
+                <p style="font-size:12px;">The genome_phenotype table was not found in the database</p>
+            </div>`;
+            return;
+        }
+
+        const genomes = landscape.genomes;
+        const userId = landscape.user_genome_id;
+        const userGenome = genomes.find(g => g.id === userId);
+        const hasAccuracy = landscape.has_accuracy;
+
+        // Sort genomes by positive count descending
+        const sorted = [...genomes].sort((a, b) => b.positive - a.positive);
+        const userIdx = sorted.findIndex(g => g.id === userId);
+
+        // Compute aggregate stats
+        const avgPositive = Math.round(genomes.reduce((s, g) => s + g.positive, 0) / genomes.length);
+        const avgNegative = Math.round(genomes.reduce((s, g) => s + g.negative, 0) / genomes.length);
+        const totalPhenotypes = genomes.length > 0 ? genomes[0].total : 0;
+
+        // Chart dimensions
+        const chartW = 700, chartH = 280;
+        const margin = { top: 20, right: 20, bottom: 70, left: 60 };
+        const w = chartW - margin.left - margin.right;
+        const h = chartH - margin.top - margin.bottom;
+        const barW = Math.max(4, Math.min(30, w / sorted.length - 1));
+
+        // Build stacked bar SVG
+        const maxTotal = Math.max(...sorted.map(g => g.total));
+        let barsSvg = '';
+        sorted.forEach((g, i) => {
+            const x = margin.left + i * (barW + 1);
+            const posH = (g.positive / maxTotal) * h;
+            const negH = (g.negative / maxTotal) * h;
+            const isUser = g.id === userId;
+            const strokeAttr = isUser ? ' stroke="#000" stroke-width="2"' : '';
+
+            // Negative (red) on bottom, positive (green) on top
+            barsSvg += `<rect x="${x}" y="${margin.top + h - negH}" width="${barW}" height="${negH}" fill="#ef4444" opacity="${isUser ? 1 : 0.7}"${strokeAttr}>
+                <title>${g.id}\nPositive: ${g.positive} | Negative: ${g.negative}</title></rect>`;
+            barsSvg += `<rect x="${x}" y="${margin.top + h - negH - posH}" width="${barW}" height="${posH}" fill="#22c55e" opacity="${isUser ? 1 : 0.7}"${strokeAttr}>
+                <title>${g.id}\nPositive: ${g.positive} | Negative: ${g.negative}</title></rect>`;
+
+            // User genome label
+            if (isUser) {
+                barsSvg += `<text x="${x + barW/2}" y="${margin.top + h - negH - posH - 5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000">You</text>`;
+            }
+        });
+
+        // Y-axis for bars
+        for (let i = 0; i <= 4; i++) {
+            const y = margin.top + h - (i / 4) * h;
+            const val = Math.round((i / 4) * maxTotal);
+            barsSvg += `<line x1="${margin.left - 5}" y1="${y}" x2="${margin.left}" y2="${y}" stroke="var(--kb-base-light)"/>`;
+            barsSvg += `<text x="${margin.left - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="var(--kb-base)">${val}</text>`;
+        }
+        barsSvg += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + h}" stroke="var(--kb-base-light)"/>`;
+        barsSvg += `<line x1="${margin.left}" y1="${margin.top + h}" x2="${margin.left + w}" y2="${margin.top + h}" stroke="var(--kb-base-light)"/>`;
+        barsSvg += `<text x="${margin.left - 40}" y="${margin.top + h/2}" text-anchor="middle" font-size="11" fill="var(--kb-base)" transform="rotate(-90, ${margin.left - 40}, ${margin.top + h/2})">Phenotypes</text>`;
+        barsSvg += `<text x="${margin.left + w/2}" y="${chartH - 5}" text-anchor="middle" font-size="11" fill="var(--kb-base)">Genomes (sorted by positive growth count)</text>`;
+
+        // Chart B: Prediction Confidence (gap count bar chart)
+        const sortedByGaps = [...genomes].sort((a, b) => a.avg_gaps - b.avg_gaps);
+        const maxGaps = Math.max(...sortedByGaps.map(g => g.avg_gaps));
+        let gapsSvg = '';
+        sortedByGaps.forEach((g, i) => {
+            const x = margin.left + i * (barW + 1);
+            const barH = maxGaps > 0 ? (g.avg_gaps / maxGaps) * h : 0;
+            const isUser = g.id === userId;
+            const fill = isUser ? '#2563eb' : '#60a5fa';
+            gapsSvg += `<rect x="${x}" y="${margin.top + h - barH}" width="${barW}" height="${barH}" fill="${fill}" opacity="${isUser ? 1 : 0.6}">
+                <title>${g.id}\nAvg gaps: ${g.avg_gaps}\nNo-gap %: ${(g.no_gap_pct * 100).toFixed(1)}%</title></rect>`;
+            if (isUser) {
+                gapsSvg += `<text x="${x + barW/2}" y="${margin.top + h - barH - 5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000">You</text>`;
+            }
+        });
+        for (let i = 0; i <= 4; i++) {
+            const y = margin.top + h - (i / 4) * h;
+            const val = ((i / 4) * maxGaps).toFixed(1);
+            gapsSvg += `<line x1="${margin.left - 5}" y1="${y}" x2="${margin.left}" y2="${y}" stroke="var(--kb-base-light)"/>`;
+            gapsSvg += `<text x="${margin.left - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="var(--kb-base)">${val}</text>`;
+        }
+        gapsSvg += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + h}" stroke="var(--kb-base-light)"/>`;
+        gapsSvg += `<line x1="${margin.left}" y1="${margin.top + h}" x2="${margin.left + w}" y2="${margin.top + h}" stroke="var(--kb-base-light)"/>`;
+        gapsSvg += `<text x="${margin.left - 40}" y="${margin.top + h/2}" text-anchor="middle" font-size="11" fill="var(--kb-base)" transform="rotate(-90, ${margin.left - 40}, ${margin.top + h/2})">Avg Gap Count</text>`;
+        gapsSvg += `<text x="${margin.left + w/2}" y="${chartH - 5}" text-anchor="middle" font-size="11" fill="var(--kb-base)">Genomes (sorted by avg gap count)</text>`;
+
+        // Chart C: Accuracy Distribution (only if has_accuracy)
+        let accuracySvg = '';
+        let accuracySection = '';
+        if (hasAccuracy) {
+            const accValues = genomes.filter(g => g.accuracy !== null).map(g => g.accuracy);
+            const nBins = 10;
+            const accBins = Array(nBins).fill(0);
+            accValues.forEach(v => {
+                const idx = Math.min(Math.floor(v * nBins), nBins - 1);
+                accBins[idx]++;
+            });
+            const maxBin = Math.max(...accBins);
+            const accBarW = w / nBins;
+
+            accBins.forEach((count, i) => {
+                const barH = maxBin > 0 ? (count / maxBin) * h : 0;
+                const x = margin.left + i * accBarW;
+                accuracySvg += `<rect x="${x}" y="${margin.top + h - barH}" width="${accBarW * 0.9}" height="${barH}" fill="#8b5cf6" opacity="0.7">
+                    <title>${(i/nBins).toFixed(1)}-${((i+1)/nBins).toFixed(1)}: ${count} genomes</title></rect>`;
+            });
+
+            // User genome marker
+            if (userGenome && userGenome.accuracy !== null) {
+                const userX = margin.left + userGenome.accuracy * w;
+                accuracySvg += `<line x1="${userX}" y1="${margin.top}" x2="${userX}" y2="${margin.top + h}" stroke="#000" stroke-width="2" stroke-dasharray="4,2"/>`;
+                accuracySvg += `<text x="${userX}" y="${margin.top - 5}" text-anchor="middle" font-size="10" font-weight="bold" fill="#000">Your genome</text>`;
+            }
+
+            for (let i = 0; i <= 4; i++) {
+                const y = margin.top + h - (i / 4) * h;
+                const val = Math.round((i / 4) * maxBin);
+                accuracySvg += `<line x1="${margin.left - 5}" y1="${y}" x2="${margin.left}" y2="${y}" stroke="var(--kb-base-light)"/>`;
+                accuracySvg += `<text x="${margin.left - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="var(--kb-base)">${val}</text>`;
+            }
+            accuracySvg += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + h}" stroke="var(--kb-base-light)"/>`;
+            accuracySvg += `<line x1="${margin.left}" y1="${margin.top + h}" x2="${margin.left + w}" y2="${margin.top + h}" stroke="var(--kb-base-light)"/>`;
+            accuracySvg += `<text x="${margin.left - 40}" y="${margin.top + h/2}" text-anchor="middle" font-size="11" fill="var(--kb-base)" transform="rotate(-90, ${margin.left - 40}, ${margin.top + h/2})">Genome Count</text>`;
+            accuracySvg += `<text x="${margin.left + w/2}" y="${chartH - 5}" text-anchor="middle" font-size="11" fill="var(--kb-base)">Prediction Accuracy</text>`;
+
+            accuracySection = `
+                <div style="margin-top: 24px;">
+                    <h3 style="font-size: 14px; font-weight: 600; color: var(--kb-base-dark); margin-bottom: 12px;">Prediction Accuracy Distribution</h3>
+                    <p style="font-size: 11px; color: var(--kb-base-light); margin-bottom: 8px;">
+                        Distribution of phenotype prediction accuracy across genomes. Your genome is marked with a vertical line.
+                    </p>
+                    <svg width="${chartW}" height="${chartH}" style="max-width: 100%;">${accuracySvg}</svg>
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="dist-chart-container">
+                <div class="dist-chart-title">Phenotype Prediction Landscape</div>
+                <div class="dist-stats">
+                    <div class="dist-stat-card">
+                        <div class="dist-stat-label">Genomes</div>
+                        <div class="dist-stat-value">${genomes.length}</div>
+                    </div>
+                    <div class="dist-stat-card" style="border-left-color: #22c55e;">
+                        <div class="dist-stat-label">Your Positive</div>
+                        <div class="dist-stat-value">${userGenome ? userGenome.positive : 'N/A'}</div>
+                    </div>
+                    <div class="dist-stat-card" style="border-left-color: #ef4444;">
+                        <div class="dist-stat-label">Your Negative</div>
+                        <div class="dist-stat-value">${userGenome ? userGenome.negative : 'N/A'}</div>
+                    </div>
+                    <div class="dist-stat-card" style="border-left-color: var(--kb-accent);">
+                        <div class="dist-stat-label">Total Phenotypes</div>
+                        <div class="dist-stat-value">${totalPhenotypes}</div>
+                    </div>
+                    <div class="dist-stat-card" style="border-left-color: #60a5fa;">
+                        <div class="dist-stat-label">Your Avg Gaps</div>
+                        <div class="dist-stat-value">${userGenome ? userGenome.avg_gaps : 'N/A'}</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 16px;">
+                    <h3 style="font-size: 14px; font-weight: 600; color: var(--kb-base-dark); margin-bottom: 12px;">Growth Phenotype Profiles</h3>
+                    <p style="font-size: 11px; color: var(--kb-base-light); margin-bottom: 8px;">
+                        Each bar shows one genome's predicted growth (<span style="color:#22c55e; font-weight:600;">positive</span>) vs no-growth (<span style="color:#ef4444; font-weight:600;">negative</span>) conditions. Your genome is highlighted.
+                    </p>
+                    <svg width="${chartW}" height="${chartH}" style="max-width: 100%;">${barsSvg}</svg>
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 8px;">
+                        <span style="display:inline-block; width:12px; height:12px; background:#22c55e; border-radius:2px;"></span>
+                        <span style="font-size:12px; color:var(--kb-base);">Positive growth</span>
+                        <span style="display:inline-block; width:12px; height:12px; background:#ef4444; border-radius:2px;"></span>
+                        <span style="font-size:12px; color:var(--kb-base);">Negative growth</span>
+                        <span style="display:inline-block; width:12px; height:12px; border:2px solid #000; border-radius:2px;"></span>
+                        <span style="font-size:12px; color:var(--kb-base);">Your genome</span>
+                    </div>
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <h3 style="font-size: 14px; font-weight: 600; color: var(--kb-base-dark); margin-bottom: 12px;">Prediction Confidence (Gap Count)</h3>
+                    <p style="font-size: 11px; color: var(--kb-base-light); margin-bottom: 8px;">
+                        Average number of gapfilled reactions per phenotype prediction. Lower = more confident (fewer reactions had to be assumed).
+                    </p>
+                    <svg width="${chartW}" height="${chartH}" style="max-width: 100%;">${gapsSvg}</svg>
+                </div>
+
+                ${accuracySection}
+            </div>
+        `;
     }
 
     function renderHistogram(track, values, naCount, container) {
