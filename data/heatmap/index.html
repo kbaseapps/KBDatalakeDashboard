@@ -510,6 +510,8 @@
         .stat-toggle:hover { background: var(--kb-base-lightest); }
         .stat-toggle input { accent-color: var(--kb-primary); }
         .stat-bar-label { font-size: 9px; fill: var(--kb-base); }
+        .stat-bar-hover:hover rect:last-of-type { opacity: 1 !important; }
+        .stat-bar-hover { cursor: pointer; }
         /* Cluster View */
         .cluster-container { flex: 1; position: relative; overflow: hidden; background: var(--kb-white); }
         #cluster-canvas { display: block; }
@@ -1341,8 +1343,12 @@
         FUNC:7, N_KO:8, N_COG:9, N_PFAM:10, N_GO:11, LOC:12,
         RAST_CONS:13, KO_CONS:14, GO_CONS:15, EC_CONS:16,
         AVG_CONS:17, BAKTA_CONS:18, EC_AVG_CONS:19, SPECIFICITY:20,
-        IS_HYPO:21, HAS_NAME:22, N_EC:23,
-        CLUSTER_SIZE:24, N_MODULES:25, EC_MAP_CONS:26, PROT_LEN:27
+        IS_HYPO:21, HAS_NAME:22, N_EC:23, AGREEMENT:24,
+        CLUSTER_SIZE:25, N_MODULES:26, EC_MAP_CONS:27, PROT_LEN:28,
+        REACTIONS:29, RICH_FLUX:30, RICH_CLASS:31, MIN_FLUX:32,
+        MIN_CLASS:33, PSORTB_NEW:34, ESSENTIALITY:35,
+        GENE_NAME:36,
+        N_PHENOTYPES:37, N_FITNESS:38, FITNESS_AVG:39
     };
 
     let LOC_NAMES = ['Cytoplasmic', 'CytoMembrane', 'Periplasmic', 'OuterMembrane', 'Extracellular', 'Unknown'];
@@ -1520,13 +1526,13 @@
             '<span class="tt-label">What it shows:</span>Metabolic activity classification in complete/LB media. Categories: blocked, forward_only, reverse_only, reversible, essential_forward, essential_reverse.' +
             '<span class="tt-label">How to read it:</span>Red = essential. Blue/Purple = active. Gray = blocked. Essential in rich but not minimal = auxotrophy-related genes.' +
             '<span class="tt-label">Biological insight:</span>Comparing rich vs minimal reveals biosynthetic capacity. Genes blocked in both are likely annotation errors or condition-specific.' },
-        { id: 'n_phenotypes', name: '# Phenotypes', field: 'N_PHENOTYPES', type: 'sequential', enabled: false,
+        { id: 'n_phenotypes', name: '# Phenotypes', field: F.N_PHENOTYPES, type: 'sequential', enabled: false,
           desc: '<strong># Linked Phenotypes</strong>' +
             '<span class="tt-label">What it shows:</span>Number of distinct phenotypes (growth conditions) linked to this gene through the metabolic model. Each phenotype represents a growth/no-growth prediction on a specific media composition.' +
             '<span class="tt-label">How to read it:</span>Light (0-2) = gene involved in few phenotypes. Dark (20+) = gene involved in many metabolic pathways/conditions.' +
             '<span class="tt-label">🔬 Data source:</span>Propagated from Adam Deutschbauer\'s RB-TnSeq database for ADP1. This is organism-specific data, not computed genome-wide.' +
             '<span class="tt-label">Biological insight:</span>High phenotype counts indicate genes that are functionally important across many conditions - often central metabolism genes. Low counts suggest specialized/condition-specific roles.' },
-        { id: 'n_fitness', name: '# Fitness Scores', field: 'N_FITNESS', type: 'sequential', enabled: false,
+        { id: 'n_fitness', name: '# Fitness Scores', field: F.N_FITNESS, type: 'sequential', enabled: false,
           desc: '<strong># Fitness Scores</strong>' +
             '<span class="tt-label">What it shows:</span>Number of experimental fitness scores from high-throughput mutant fitness assays where model predictions match experimental data (fitness_match=yes). Based on RB-TnSeq and similar Tn-seq datasets.' +
             '<span class="tt-label">How to read it:</span>Light (0) = no experimental validation. Dark (high count) = gene validated across many conditions.' +
@@ -1873,6 +1879,8 @@
             console.log('No config.json found, using defaults');
             CONFIG = {};
         }
+        // Ensure CONFIG.fields always exists (fallback to inline F)
+        if (!CONFIG.fields) CONFIG.fields = F;
     }
 
     function renderNavContext(nav) {
@@ -2283,7 +2291,7 @@
         const title = document.getElementById('detail-title');
         const body = document.getElementById('detail-body');
 
-        title.textContent = `Gene ${gene[F.FID]}`;
+        title.textContent = gene[F.GENE_NAME] ? `${gene[F.GENE_NAME]} (${gene[F.FID]})` : `Gene ${gene[F.FID]}`;
 
         const consBar = (val) => {
             if (val < 0) return '<span style="color:#9D9389">N/A</span>';
@@ -2321,7 +2329,7 @@
             </div>
             <div class="detail-section">
                 <div class="detail-section-title">Annotation</div>
-                <div class="detail-row"><span class="detail-label">Gene Name</span><span class="detail-value">${gene[F.HAS_NAME] ? 'Yes' : 'No'}</span></div>
+                <div class="detail-row"><span class="detail-label">Gene Name</span><span class="detail-value">${gene[F.GENE_NAME] || (gene[F.HAS_NAME] ? 'Yes' : 'No annotation')}</span></div>
                 <div class="detail-row"><span class="detail-label">Protein Length</span><span class="detail-value">${gene[F.PROT_LEN]} aa</span></div>
             </div>
             <div class="detail-section">
@@ -2336,6 +2344,15 @@
             <div class="detail-section">
                 <div class="detail-section-title">Localization</div>
                 <div class="detail-row"><span class="detail-label">PSORTb</span><span class="detail-value">${LOC_NAMES[gene[F.LOC]] || 'Unknown'}</span></div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-section-title">Metabolic</div>
+                <div class="detail-row"><span class="detail-label">Reactions</span><span class="detail-value">${gene[F.REACTIONS] ? gene[F.REACTIONS].split(';').length : 0}</span></div>
+                <div class="detail-row"><span class="detail-label">Essentiality</span><span class="detail-value">${gene[F.ESSENTIALITY] >= 0 ? (gene[F.ESSENTIALITY] === 1 ? 'Essential' : 'Non-essential') : 'N/A'}</span></div>
+                ${gene[F.N_PHENOTYPES] > 0 ? `
+                <div class="detail-row"><span class="detail-label">Phenotypes</span><span class="detail-value">${gene[F.N_PHENOTYPES]}</span></div>
+                <div class="detail-row"><span class="detail-label">Fitness Scores</span><span class="detail-value">${gene[F.N_FITNESS]}</span></div>
+                ` : ''}
             </div>
         `;
         panel.classList.add('open');
@@ -2693,7 +2710,7 @@
 
             const tooltip = document.getElementById('tooltip');
             tooltip.innerHTML = `
-                <div class="gene-id">Gene ${gene[F.FID]}</div>
+                <div class="gene-id">${gene[F.GENE_NAME] ? `${gene[F.GENE_NAME]} (${gene[F.FID]})` : `Gene ${gene[F.FID]}`}</div>
                 <div class="tt-row"><span class="tt-label">Position</span><span class="tt-val">${gene[F.START]} | ${gene[F.LENGTH]} bp | ${gene[F.STRAND] ? '+' : '-'}</span></div>
                 <div class="tt-row"><span class="tt-label">Pangenome</span><span class="tt-val">${PAN_NAMES[gene[F.PAN_CAT]]} (${(gene[F.CONS_FRAC] * 100).toFixed(0)}%)</span></div>
                 <div class="tt-row"><span class="tt-label">${track.name}</span><span class="tt-highlight">${trackValue}</span></div>
@@ -2702,7 +2719,7 @@
                     <div class="tt-row"><span class="tt-label">KO / GO / EC</span><span class="tt-val">${fmtCons(gene[F.KO_CONS])} / ${fmtCons(gene[F.GO_CONS])} / ${fmtCons(gene[F.EC_CONS])}</span></div>
                     <div class="tt-row"><span class="tt-label">Terms</span><span class="tt-val">KO:${gene[F.N_KO]} COG:${gene[F.N_COG]} Pfam:${gene[F.N_PFAM]} GO:${gene[F.N_GO]} EC:${gene[F.N_EC]}</span></div>
                     <div class="tt-row"><span class="tt-label">Location</span><span class="tt-val">${LOC_NAMES[gene[F.LOC]] || '?'}</span></div>
-                    <div class="tt-row"><span class="tt-label">Status</span><span class="tt-val">${gene[F.HAS_NAME] ? 'Named' : 'Unnamed'} | ${gene[F.PROT_LEN]}aa</span></div>
+                    <div class="tt-row"><span class="tt-label">Status</span><span class="tt-val">${gene[F.GENE_NAME] || (gene[F.HAS_NAME] ? 'Named' : 'Unnamed')} | ${gene[F.PROT_LEN]}aa</span></div>
                 </div>
                 <div class="func">${gene[F.FUNC] || 'No function annotation'}</div>
             `;
@@ -3110,6 +3127,18 @@
         const n = leafOrder.length;
         const linkage = d.linkage;
 
+        // Compute avg_consistency for user genome from genes data (user-genome only stat)
+        if (genes && genes.length > 0 && d.genome_stats[d.user_genome_id]) {
+            let sum = 0, count = 0;
+            genes.forEach(g => {
+                const v = g[F.AVG_CONS];
+                if (v != null && v >= 0) { sum += v; count++; }
+            });
+            if (count > 0) {
+                d.genome_stats[d.user_genome_id].avg_consistency = Math.round((sum / count) * 10000) / 10000;
+            }
+        }
+
         // Layout params
         const leafH = 24;
         const marginTop = 20;
@@ -3239,7 +3268,7 @@
             const stats = d.genome_stats[gid] || {};
             const tax = meta.tax || {};
             const shortId = gid.replace('RS_GCF_', 'GCF_').replace(/\.1$/, '');
-            const displayName = tax.species || shortId;
+            const displayName = tax.species || (isUser && METADATA && METADATA.organism ? METADATA.organism : shortId);
             // Truncate user genome label to fit better
             let label = isUser ? `${displayName} (YOUR GENOME)` : displayName;
             if (isUser && label.length > 35) {
@@ -3283,6 +3312,7 @@
                     }
 
                     const bx = barStart + si * barW;
+                    svg += `<g class="stat-bar-hover" data-gid="${gid}" data-stat-id="${s.id}" data-val="${val}">`;
                     // Background track
                     svg += `<rect x="${bx}" y="${y - 6}" width="${barW - 6}" height="12" fill="#F2EFEB" rx="1"/>`;
 
@@ -3296,6 +3326,7 @@
                             svg += `<rect x="${bx}" y="${y - 6}" width="${w}" height="12" fill="${s.color}" opacity="0.7" rx="1"/>`;
                         }
                     }
+                    svg += `</g>`;
                 });
             }
         });
@@ -3356,6 +3387,45 @@
                 tooltip.style.top = Math.max(10, rect.top - 30) + 'px';
             });
             leaf.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+        });
+
+        // Tooltips on stat bar hover
+        container.querySelectorAll('.stat-bar-hover').forEach(bar => {
+            bar.addEventListener('mouseenter', (e) => {
+                const statId = bar.dataset.statId;
+                const gid = bar.dataset.gid;
+                const rawVal = bar.dataset.val;
+                const stat = TREE_STATS.find(s => s.id === statId);
+                if (!stat) return;
+
+                let displayVal;
+                if (rawVal === 'null') {
+                    displayVal = 'N/A';
+                } else {
+                    const val = parseFloat(rawVal);
+                    if (['core_pct', 'ko_pct', 'avg_consistency'].includes(statId)) {
+                        displayVal = (val * 100).toFixed(1) + '%';
+                    } else if (['checkm_completeness', 'checkm_contamination'].includes(statId)) {
+                        displayVal = val.toFixed(1) + '%';
+                    } else {
+                        displayVal = Number.isInteger(val) ? val.toLocaleString() : val.toFixed(2);
+                    }
+                }
+
+                const meta = d.genome_metadata[gid] || {};
+                const genomeName = meta.tax?.species || gid;
+
+                tooltip.innerHTML = `
+                    <div style="font-weight:700; color:${stat.color}; margin-bottom:4px;">${stat.name}</div>
+                    <div style="font-size:13px; font-weight:600;">${displayVal}</div>
+                    <div style="color:#9D9389; font-size:10px; margin-top:2px;">${genomeName}</div>
+                `;
+                tooltip.style.display = 'block';
+                const rect = bar.getBoundingClientRect();
+                tooltip.style.left = Math.min(rect.right + 8, window.innerWidth - 250) + 'px';
+                tooltip.style.top = Math.max(10, rect.top - 20) + 'px';
+            });
+            bar.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
         });
 
         // Tooltips on stat header hover
@@ -3588,7 +3658,7 @@
             if (idx >= 0) {
                 const gene = genes[idx];
                 tooltip.innerHTML = `
-                    <div class="gene-id">Gene ${gene[F.FID]}</div>
+                    <div class="gene-id">${gene[F.GENE_NAME] ? `${gene[F.GENE_NAME]} (${gene[F.FID]})` : `Gene ${gene[F.FID]}`}</div>
                     <div class="tt-row"><span class="tt-label">Position</span><span class="tt-val">${gene[F.START]} | ${gene[F.STRAND] ? '+' : '-'}</span></div>
                     <div class="tt-row"><span class="tt-label">Pangenome</span><span class="tt-val">${PAN_NAMES[gene[F.PAN_CAT]]} (${(gene[F.CONS_FRAC] * 100).toFixed(0)}%)</span></div>
                     <div class="tt-row"><span class="tt-label">Avg Consistency</span><span class="tt-val">${gene[F.AVG_CONS] < 0 ? 'N/A' : gene[F.AVG_CONS].toFixed(3)}</span></div>

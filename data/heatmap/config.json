@@ -24,7 +24,8 @@
     "EC_MAP_CONS": 27, "PROT_LEN": 28,
     "REACTIONS": 29, "RICH_FLUX": 30, "RICH_CLASS": 31, "MIN_FLUX": 32,
     "MIN_CLASS": 33, "PSORTB_NEW": 34, "ESSENTIALITY": 35,
-    "N_PHENOTYPES": 36, "N_FITNESS": 37, "FITNESS_AVG": 38
+    "GENE_NAME": 36,
+    "N_PHENOTYPES": 37, "N_FITNESS": 38, "FITNESS_AVG": 39
   },
   "categories": {
     "localization": ["Cytoplasmic", "CytoMembrane", "Periplasmic", "OuterMembrane", "Extracellular", "Unknown"],
