@@ -3715,7 +3715,10 @@
         const select = document.getElementById('dist-track-select');
         select.innerHTML = '<option value="">-- Choose a track --</option>';
 
-        // Add special phenotype landscape option if data available
+        // STOWED: Phenotype Prediction Landscape - needs experimental accuracy data in genome_phenotype
+        // (observed_objective column). Revisit when Chris's pipeline populates this data.
+        // See renderPhenotypeLandscape() function below - ready to activate.
+        /*
         if (summaryData && summaryData.phenotype_landscape) {
             const opt = document.createElement('option');
             opt.value = '__phenotype_landscape__';
@@ -3728,6 +3731,7 @@
             sep.textContent = '───────────────────';
             select.appendChild(sep);
         }
+        */
 
         TRACKS.forEach(track => {
             const option = document.createElement('option');
@@ -3753,11 +3757,11 @@
 
         const container = document.getElementById('distributions-container');
 
-        // Special: Phenotype Prediction Landscape
-        if (trackId === '__phenotype_landscape__') {
-            renderPhenotypeLandscape(container);
-            return;
-        }
+        // STOWED: Phenotype Prediction Landscape (needs experimental accuracy data)
+        // if (trackId === '__phenotype_landscape__') {
+        //     renderPhenotypeLandscape(container);
+        //     return;
+        // }
 
         const track = TRACKS.find(t => t.id === trackId);
         if (!track) return;
